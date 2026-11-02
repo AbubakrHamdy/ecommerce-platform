@@ -1,5 +1,6 @@
 package com.abubakr.ecommerceplatform.service;
 
+import com.abubakr.ecommerceplatform.config.CacheNames;
 import com.abubakr.ecommerceplatform.dto.order.CheckoutRequest;
 import com.abubakr.ecommerceplatform.entity.Address;
 import com.abubakr.ecommerceplatform.entity.Cart;
@@ -24,6 +25,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -35,6 +38,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +52,8 @@ class OrderServiceTest {
     @Mock private AddressRepository addressRepository;
     @Mock private ProductRepository productRepository;
     @Mock private OrderMapper orderMapper;
+    @Mock private CacheManager cacheManager;
+    @Mock private Cache productCache;
 
     private OrderService service;
     private Cart cart;
@@ -57,7 +63,8 @@ class OrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper);
+        service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper,
+                cacheManager);
         User user = User.builder().email("jane@example.com").build();
         user.setId(USER_ID);
         cart = Cart.builder().user(user).build();
@@ -140,6 +147,27 @@ class OrderServiceTest {
         InOrder order = inOrder(productRepository);
         order.verify(productRepository).reserveStock(1L, 1);
         order.verify(productRepository).reserveStock(3L, 2);
+    }
+
+    @Test
+    void checkoutAndCancel_clearCachedProductDetailsSoStockIsNeverStale() {
+        when(cacheManager.getCache(CacheNames.PRODUCTS)).thenReturn(productCache);
+        addLine(mouse, 2);
+        addLine(laptop, 1);
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+        when(addressRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(address));
+        when(productRepository.reserveStock(anyLong(), anyInt())).thenReturn(1);
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.checkout(USER_ID, new CheckoutRequest(1L));
+        verify(productCache).evict(1L);
+        verify(productCache).evict(3L);
+
+        Order paid = order(OrderStatus.PAID);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(paid));
+        service.updateStatus(7L, OrderStatus.CANCELLED);
+        verify(productCache, times(2)).evict(1L);
+        verify(productCache, times(2)).evict(3L);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.abubakr.ecommerceplatform.service;
 
+import com.abubakr.ecommerceplatform.config.CacheNames;
 import com.abubakr.ecommerceplatform.dto.common.PageResponse;
 import com.abubakr.ecommerceplatform.dto.order.CheckoutRequest;
 import com.abubakr.ecommerceplatform.dto.order.OrderResponse;
@@ -21,6 +22,8 @@ import com.abubakr.ecommerceplatform.repository.CartRepository;
 import com.abubakr.ecommerceplatform.repository.OrderRepository;
 import com.abubakr.ecommerceplatform.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +44,7 @@ public class OrderService {
     private final AddressRepository addressRepository;
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
+    private final CacheManager cacheManager;
 
     @Transactional
     public OrderResponse checkout(Long userId, CheckoutRequest request) {
@@ -147,7 +151,18 @@ public class OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.getItems().stream()
                 .sorted(Comparator.comparing(item -> item.getProduct().getId()))
-                .forEach(item -> productRepository.releaseStock(item.getProduct().getId(), item.getQuantity()));
+                .forEach(item -> {
+                    productRepository.releaseStock(item.getProduct().getId(), item.getQuantity());
+                    evictCachedProduct(item.getProduct().getId());
+                });
+    }
+
+    // Stock changes are bulk UPDATEs that bypass @CacheEvict; the transaction-aware cache evicts after commit.
+    private void evictCachedProduct(Long productId) {
+        Cache products = cacheManager.getCache(CacheNames.PRODUCTS);
+        if (products != null) {
+            products.evict(productId);
+        }
     }
 
     private Order findOrder(Long orderId) {
@@ -166,5 +181,6 @@ public class OrderService {
                     ? "Not enough stock for '" + product.getName() + "'"
                     : "'" + product.getName() + "' is no longer available");
         }
+        evictCachedProduct(product.getId());
     }
 }
