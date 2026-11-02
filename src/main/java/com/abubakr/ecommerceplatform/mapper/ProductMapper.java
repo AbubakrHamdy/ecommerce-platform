@@ -16,7 +16,7 @@ public interface ProductMapper {
 
     ProductResponse toResponse(Product product);
 
-    @Mapping(target = "thumbnailUrl", expression = "java(thumbnailUrl(product))")
+    @Mapping(target = "thumbnailUrl", expression = "java(ProductMapper.primaryImageUrl(product))")
     @Mapping(target = "categoryName", source = "category.name")
     ProductSummaryResponse toSummary(Product product);
 
@@ -37,7 +37,7 @@ public interface ProductMapper {
     @Mapping(target = "reviews", ignore = true)
     void updateEntity(ProductUpdateRequest request, @MappingTarget Product product);
 
-    default String thumbnailUrl(Product product) {
+    static String primaryImageUrl(Product product) {
         return product.getImages().stream()
                 .filter(ProductImage::isPrimary)
                 .findFirst()

@@ -1,0 +1,153 @@
+package com.abubakr.ecommerceplatform.service;
+
+import com.abubakr.ecommerceplatform.dto.order.CheckoutRequest;
+import com.abubakr.ecommerceplatform.entity.Address;
+import com.abubakr.ecommerceplatform.entity.Cart;
+import com.abubakr.ecommerceplatform.entity.CartItem;
+import com.abubakr.ecommerceplatform.entity.Order;
+import com.abubakr.ecommerceplatform.entity.Product;
+import com.abubakr.ecommerceplatform.entity.User;
+import com.abubakr.ecommerceplatform.enums.OrderStatus;
+import com.abubakr.ecommerceplatform.exception.BadRequestException;
+import com.abubakr.ecommerceplatform.exception.ConflictException;
+import com.abubakr.ecommerceplatform.exception.ResourceNotFoundException;
+import com.abubakr.ecommerceplatform.mapper.OrderMapper;
+import com.abubakr.ecommerceplatform.repository.AddressRepository;
+import com.abubakr.ecommerceplatform.repository.CartRepository;
+import com.abubakr.ecommerceplatform.repository.OrderRepository;
+import com.abubakr.ecommerceplatform.repository.ProductRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class OrderServiceTest {
+
+    private static final Long USER_ID = 2L;
+
+    @Mock private OrderRepository orderRepository;
+    @Mock private CartRepository cartRepository;
+    @Mock private AddressRepository addressRepository;
+    @Mock private ProductRepository productRepository;
+    @Mock private OrderMapper orderMapper;
+
+    private OrderService service;
+    private Cart cart;
+    private Address address;
+    private Product laptop;
+    private Product mouse;
+
+    @BeforeEach
+    void setUp() {
+        service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper);
+        User user = User.builder().email("jane@example.com").build();
+        user.setId(USER_ID);
+        cart = Cart.builder().user(user).build();
+        address = Address.builder().user(user).street("123 Tahrir Street").city("Cairo").postalCode("11511").country("Egypt").build();
+        address.setId(1L);
+        laptop = product(1L, "ProBook 14 Laptop", "899.99");
+        mouse = product(3L, "Wireless Mouse", "19.99");
+    }
+
+    @Test
+    void checkout_emptyCart_isRejected() {
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+
+        assertThatThrownBy(() -> service.checkout(USER_ID, new CheckoutRequest(1L)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Your cart is empty");
+    }
+
+    @Test
+    void checkout_withSomeoneElsesAddress_isNotFoundAndReservesNothing() {
+        addLine(mouse, 1);
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+        when(addressRepository.findByIdAndUserId(99L, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.checkout(USER_ID, new CheckoutRequest(99L)))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(productRepository, never()).reserveStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void checkout_whenOneProductRunsOut_failsWithoutCreatingAnOrder() {
+        addLine(mouse, 2);
+        addLine(laptop, 1);
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+        when(addressRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(address));
+        when(productRepository.reserveStock(1L, 1)).thenReturn(1);
+        when(productRepository.reserveStock(3L, 2)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.checkout(USER_ID, new CheckoutRequest(1L)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Not enough stock for 'Wireless Mouse'");
+        verify(orderRepository, never()).save(any());
+        assertThat(cart.getItems()).hasSize(2);
+    }
+
+    @Test
+    void checkout_success_snapshotsPricesAndAddressAndEmptiesTheCart() {
+        addLine(mouse, 2);
+        addLine(laptop, 1);
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+        when(addressRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(address));
+        when(productRepository.reserveStock(anyLong(), anyInt())).thenReturn(1);
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.checkout(USER_ID, new CheckoutRequest(1L));
+
+        ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(saved.capture());
+        Order order = saved.getValue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("939.97");
+        assertThat(order.getShippingAddress().street()).isEqualTo("123 Tahrir Street");
+        assertThat(order.getItems()).extracting("productName").containsExactly("ProBook 14 Laptop", "Wireless Mouse");
+        assertThat(order.getItems()).extracting("priceAtPurchase")
+                .containsExactly(new BigDecimal("899.99"), new BigDecimal("19.99"));
+        assertThat(cart.getItems()).isEmpty();
+    }
+
+    @Test
+    void checkout_reservesStockInProductIdOrderToAvoidDeadlocks() {
+        addLine(mouse, 2);
+        addLine(laptop, 1);
+        when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
+        when(addressRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(address));
+        when(productRepository.reserveStock(anyLong(), anyInt())).thenReturn(1);
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.checkout(USER_ID, new CheckoutRequest(1L));
+
+        InOrder order = inOrder(productRepository);
+        order.verify(productRepository).reserveStock(1L, 1);
+        order.verify(productRepository).reserveStock(3L, 2);
+    }
+
+    private void addLine(Product product, int quantity) {
+        cart.getItems().add(CartItem.builder().cart(cart).product(product).quantity(quantity).build());
+    }
+
+    private static Product product(Long id, String name, String price) {
+        Product product = Product.builder().name(name).price(new BigDecimal(price)).stock(10).active(true).build();
+        product.setId(id);
+        return product;
+    }
+}
