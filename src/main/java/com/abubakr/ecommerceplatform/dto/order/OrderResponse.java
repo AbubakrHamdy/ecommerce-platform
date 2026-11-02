@@ -1,6 +1,5 @@
 package com.abubakr.ecommerceplatform.dto.order;
 
-import com.abubakr.ecommerceplatform.dto.user.AddressResponse;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 
 import java.math.BigDecimal;
@@ -12,6 +11,6 @@ public record OrderResponse(
         OrderStatus status,
         BigDecimal totalAmount,
         List<OrderItemResponse> items,
-        AddressResponse shippingAddress,
+        ShippingAddressResponse shippingAddress,
         Instant createdAt
 ) {}

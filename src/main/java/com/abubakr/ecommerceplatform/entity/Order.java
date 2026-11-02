@@ -3,6 +3,7 @@ package com.abubakr.ecommerceplatform.entity;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -41,9 +42,9 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "address_id", nullable = false)
-    private Address shippingAddress;
+    // A copy taken at checkout, so later address-book edits never rewrite order history.
+    @Embedded
+    private ShippingAddress shippingAddress;
 
     // items are priced snapshots at checkout time; never cascade-removed or merged once persisted
     @Builder.Default

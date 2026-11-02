@@ -23,6 +23,9 @@ import java.math.BigDecimal;
 @Table(name = "order_items")
 public class OrderItem extends BaseEntity {
 
+    @Column(nullable = false, length = 150)
+    private String productName;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal priceAtPurchase;
 
