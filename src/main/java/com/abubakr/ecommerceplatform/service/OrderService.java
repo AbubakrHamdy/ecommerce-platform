@@ -1,7 +1,9 @@
 package com.abubakr.ecommerceplatform.service;
 
+import com.abubakr.ecommerceplatform.dto.common.PageResponse;
 import com.abubakr.ecommerceplatform.dto.order.CheckoutRequest;
 import com.abubakr.ecommerceplatform.dto.order.OrderResponse;
+import com.abubakr.ecommerceplatform.dto.order.OrderSummaryResponse;
 import com.abubakr.ecommerceplatform.entity.Address;
 import com.abubakr.ecommerceplatform.entity.Cart;
 import com.abubakr.ecommerceplatform.entity.CartItem;
@@ -19,16 +21,20 @@ import com.abubakr.ecommerceplatform.repository.CartRepository;
 import com.abubakr.ecommerceplatform.repository.OrderRepository;
 import com.abubakr.ecommerceplatform.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
+    private static final Set<String> SORTABLE_FIELDS = Set.of("createdAt", "totalAmount");
 
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
@@ -72,6 +78,40 @@ public class OrderService {
         Order saved = orderRepository.save(order);
         cart.getItems().clear();
         return orderMapper.toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderSummaryResponse> myOrders(Long userId, Pageable pageable) {
+        return PageResponse.of(orderRepository.findByUserId(userId, Pageables.withAllowedSort(pageable, SORTABLE_FIELDS))
+                .map(orderMapper::toSummary));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getMyOrder(Long userId, Long orderId) {
+        return orderMapper.toResponse(findOwnOrder(userId, orderId));
+    }
+
+    @Transactional
+    public OrderResponse cancelMyOrder(Long userId, Long orderId) {
+        Order order = findOwnOrder(userId, orderId);
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new ConflictException("Only pending orders can be cancelled; please contact support to cancel a paid order");
+        }
+        cancel(order);
+        return orderMapper.toResponse(order);
+    }
+
+    // Puts reserved stock back; products are released in id order, matching checkout, to avoid deadlocks.
+    void cancel(Order order) {
+        order.setStatus(OrderStatus.CANCELLED);
+        order.getItems().stream()
+                .sorted(Comparator.comparing(item -> item.getProduct().getId()))
+                .forEach(item -> productRepository.releaseStock(item.getProduct().getId(), item.getQuantity()));
+    }
+
+    private Order findOwnOrder(Long userId, Long orderId) {
+        return orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
     }
 
     private void reserve(Product product, int quantity) {

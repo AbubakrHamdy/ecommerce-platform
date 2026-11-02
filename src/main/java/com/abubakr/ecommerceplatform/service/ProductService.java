@@ -18,9 +18,7 @@ import com.abubakr.ecommerceplatform.repository.ProductSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,7 +49,7 @@ public class ProductService {
         Specification<Product> filters = ProductSpecifications.matching(
                 criteria.search(), categoryIds, criteria.minPrice(), criteria.maxPrice(), active);
 
-        return PageResponse.of(productRepository.findAll(filters, withValidatedSort(pageable))
+        return PageResponse.of(productRepository.findAll(filters, Pageables.withAllowedSort(pageable, SORTABLE_FIELDS))
                 .map(productMapper::toSummary));
     }
 
@@ -99,16 +97,5 @@ public class ProductService {
     private Category findCategory(Long id) {
         return categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
-    }
-
-    private static Pageable withValidatedSort(Pageable pageable) {
-        for (Sort.Order order : pageable.getSort()) {
-            if (!SORTABLE_FIELDS.contains(order.getProperty())) {
-                throw new BadRequestException(
-                        "Cannot sort by '" + order.getProperty() + "'. Allowed fields: createdAt, name, price");
-            }
-        }
-        // A unique tie-breaker keeps pages stable when many products share the same price or name.
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort().and(Sort.by("id")));
     }
 }

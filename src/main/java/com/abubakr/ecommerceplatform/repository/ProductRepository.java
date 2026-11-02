@@ -21,4 +21,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
             update Product p set p.stock = p.stock - :quantity
             where p.id = :id and p.active = true and p.stock >= :quantity""")
     int reserveStock(@Param("id") Long id, @Param("quantity") int quantity);
+
+    @Modifying
+    @Query("update Product p set p.stock = p.stock + :quantity where p.id = :id")
+    int releaseStock(@Param("id") Long id, @Param("quantity") int quantity);
 }

@@ -5,6 +5,7 @@ import com.abubakr.ecommerceplatform.entity.Address;
 import com.abubakr.ecommerceplatform.entity.Cart;
 import com.abubakr.ecommerceplatform.entity.CartItem;
 import com.abubakr.ecommerceplatform.entity.Order;
+import com.abubakr.ecommerceplatform.entity.OrderItem;
 import com.abubakr.ecommerceplatform.entity.Product;
 import com.abubakr.ecommerceplatform.entity.User;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
@@ -139,6 +140,48 @@ class OrderServiceTest {
         InOrder order = inOrder(productRepository);
         order.verify(productRepository).reserveStock(1L, 1);
         order.verify(productRepository).reserveStock(3L, 2);
+    }
+
+    @Test
+    void getMyOrder_orderOfAnotherUser_isNotFound() {
+        when(orderRepository.findByIdAndUserId(7L, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getMyOrder(USER_ID, 7L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Order not found");
+    }
+
+    @Test
+    void cancelMyOrder_pending_cancelsAndPutsStockBack() {
+        Order order = order(OrderStatus.PENDING);
+        when(orderRepository.findByIdAndUserId(7L, USER_ID)).thenReturn(Optional.of(order));
+
+        service.cancelMyOrder(USER_ID, 7L);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        InOrder released = inOrder(productRepository);
+        released.verify(productRepository).releaseStock(1L, 1);
+        released.verify(productRepository).releaseStock(3L, 2);
+    }
+
+    @Test
+    void cancelMyOrder_alreadyPaid_isRejectedAndStockUntouched() {
+        Order order = order(OrderStatus.PAID);
+        when(orderRepository.findByIdAndUserId(7L, USER_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.cancelMyOrder(USER_ID, 7L)).isInstanceOf(ConflictException.class);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+    }
+
+    private Order order(OrderStatus status) {
+        Order order = Order.builder().status(status).build();
+        order.setId(7L);
+        order.addItem(OrderItem.builder().product(mouse).productName("Wireless Mouse")
+                .priceAtPurchase(new BigDecimal("19.99")).quantity(2).build());
+        order.addItem(OrderItem.builder().product(laptop).productName("ProBook 14 Laptop")
+                .priceAtPurchase(new BigDecimal("899.99")).quantity(1).build());
+        return order;
     }
 
     private void addLine(Product product, int quantity) {
