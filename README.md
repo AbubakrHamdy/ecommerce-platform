@@ -2,7 +2,7 @@
 
 A production-style e-commerce REST API built with **Java 21** and **Spring Boot 4**, with an Angular storefront and admin dashboard planned on top.
 
-> **Status:** in active development. Authentication and the catalog are complete; cart and orders are next. See the [roadmap](#roadmap).
+> **Status:** in active development. Authentication, catalog, cart and orders are complete; payments are next. See the [roadmap](#roadmap).
 
 ## Features so far
 
@@ -14,6 +14,10 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 - **Image uploads to S3-compatible storage**, validated by file content, with consistent cleanup on failure
 - **Redis caching** with transaction-aware eviction and automatic fallback to PostgreSQL when Redis is down
 - **No N+1 queries** on listings (3 SQL statements per page)
+- **Cart and checkout** with atomic stock reservation: concurrent buyers can never oversell, and a double-submitted checkout creates one order ([details](docs/orders.md))
+- **Order lifecycle** with an enforced status flow, optimistic locking, automatic restocking on cancel, and expiry of unpaid orders
+- **Order history that never changes**: prices, product names and shipping addresses are snapshotted at checkout
+- **Ownership checks** on every customer resource (another user's order, cart line or address returns 404)
 - **Consistent JSON errors** for validation, 401/403, 404, 409, 413, 415 and unexpected failures
 - **Versioned schema** with Flyway migrations and dev-only seed data
 - **Interactive API docs** with Swagger UI, including an "Authorize" button for tokens
@@ -30,7 +34,7 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 | Email | Spring Mail, async sending, Mailpit for local development |
 | Mapping / validation | MapStruct, Jakarta Bean Validation, Lombok |
 | API docs | springdoc-openapi (Swagger UI) |
-| Testing | JUnit 5, Mockito, AssertJ |
+| Testing | JUnit 5, Mockito, AssertJ; integration tests against PostgreSQL for concurrency |
 | Infrastructure | Docker Compose |
 
 ## Getting started
@@ -76,8 +80,8 @@ src/main/java/com/abubakr/ecommerceplatform
 ├── exception/     Custom exceptions and the global exception handler
 ├── mapper/        MapStruct mappers
 ├── repository/    Spring Data repositories and search specifications
-├── security/      Token creation and JSON 401/403 handling
-└── service/       Business logic, file storage
+├── security/      Token creation, JSON 401/403 handling, @CurrentUserId
+└── service/       Business logic, file storage, scheduled order expiry
 
 src/main/resources
 ├── db/migration/  Flyway schema migrations (all environments)
@@ -88,13 +92,14 @@ src/main/resources
 
 - [Authentication](docs/authentication.md): token design, endpoints, password reset, security decisions
 - [Catalog](docs/catalog.md): search and filters, categories, image uploads, caching, query performance
+- [Cart & Orders](docs/orders.md): checkout, preventing overselling, snapshots, status flow, expiry, ownership checks
 
 ## Roadmap
 
 - [x] Project setup: Docker Compose, Flyway, Swagger, global error handling
 - [x] Authentication: JWT, refresh tokens, roles, password reset email
 - [x] Catalog: categories, products, image upload, search and filters, Redis cache
-- [ ] Cart and orders: checkout, stock handling, order status flow
+- [x] Cart and orders: checkout, stock handling, order status flow
 - [ ] Payments: Stripe and Paymob, idempotent webhooks
 - [ ] Order emails
 - [ ] Admin statistics
