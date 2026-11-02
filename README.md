@@ -2,7 +2,7 @@
 
 A production-style e-commerce REST API built with **Java 21** and **Spring Boot 4**, with an Angular storefront and admin dashboard planned on top.
 
-> **Status:** in active development. Authentication, catalog, cart and orders are complete; payments are next. See the [roadmap](#roadmap).
+> **Status:** in active development. Authentication, catalog, cart, orders and payments are complete; order emails are next. See the [roadmap](#roadmap).
 
 ## Features so far
 
@@ -18,6 +18,9 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 - **Order lifecycle** with an enforced status flow, optimistic locking, automatic restocking on cancel, and expiry of unpaid orders
 - **Order history that never changes**: prices, product names and shipping addresses are snapshotted at checkout
 - **Ownership checks** on every customer resource (another user's order, cart line or address returns 404)
+- **Stripe and Paymob payments** on hosted pages; the order is marked paid only by a signed webhook ([details](docs/payments.md))
+- **Market-aware setup**: the store's country picks the currency (EG → EGP, US → USD, DE → EUR) and the provider (Paymob for the Middle East, Stripe elsewhere)
+- **Webhook safety**: signature verification with replay protection, database-enforced idempotency, amount and currency checks, and late or duplicate payments flagged for refund
 - **Consistent JSON errors** for validation, 401/403, 404, 409, 413, 415 and unexpected failures
 - **Versioned schema** with Flyway migrations and dev-only seed data
 - **Interactive API docs** with Swagger UI, including an "Authorize" button for tokens
@@ -31,10 +34,11 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 | Persistence | Spring Data JPA, Hibernate 7, PostgreSQL 17, Flyway |
 | Caching | Redis 7, Spring Cache |
 | File storage | AWS SDK v2 for S3; RustFS (S3-compatible) for local development |
+| Payments | Stripe (stripe-java SDK), Paymob (Intention API over Spring RestClient) |
 | Email | Spring Mail, async sending, Mailpit for local development |
 | Mapping / validation | MapStruct, Jakarta Bean Validation, Lombok |
 | API docs | springdoc-openapi (Swagger UI) |
-| Testing | JUnit 5, Mockito, AssertJ; integration tests against PostgreSQL for concurrency |
+| Testing | JUnit 5, Mockito, AssertJ, MockRestServiceServer; integration tests against PostgreSQL; offline payment tests with stripe-mock and WireMock |
 | Infrastructure | Docker Compose |
 
 ## Getting started
@@ -51,6 +55,8 @@ docker compose up -d
 On Windows use `mvnw.cmd` instead of `./mvnw`. In IntelliJ, set **Active profiles** to `dev` in the run configuration.
 
 The `dev` profile is required locally: it provides the development JWT secret and storage credentials, creates the image bucket, and loads the seed data.
+
+The store defaults to Egypt (`STORE_COUNTRY=EG`, prices in EGP). Payment providers are offered only once their keys are set as environment variables; see [Payments → Trying it with real test accounts](docs/payments.md#trying-it-with-real-test-accounts).
 
 | Service | URL |
 |---|---|
@@ -80,6 +86,7 @@ src/main/java/com/abubakr/ecommerceplatform
 ├── exception/     Custom exceptions and the global exception handler
 ├── mapper/        MapStruct mappers
 ├── repository/    Spring Data repositories and search specifications
+├── gateway/       Payment provider integrations (Stripe, Paymob) behind one interface
 ├── security/      Token creation, JSON 401/403 handling, @CurrentUserId
 └── service/       Business logic, file storage, scheduled order expiry
 
@@ -93,6 +100,7 @@ src/main/resources
 - [Authentication](docs/authentication.md): token design, endpoints, password reset, security decisions
 - [Catalog](docs/catalog.md): search and filters, categories, image uploads, caching, query performance
 - [Cart & Orders](docs/orders.md): checkout, preventing overselling, snapshots, status flow, expiry, ownership checks
+- [Payments](docs/payments.md): Stripe and Paymob, country-based currency, webhook verification and idempotency, edge cases, test accounts
 
 ## Roadmap
 
@@ -100,7 +108,7 @@ src/main/resources
 - [x] Authentication: JWT, refresh tokens, roles, password reset email
 - [x] Catalog: categories, products, image upload, search and filters, Redis cache
 - [x] Cart and orders: checkout, stock handling, order status flow
-- [ ] Payments: Stripe and Paymob, idempotent webhooks
+- [x] Payments: Stripe and Paymob, idempotent webhooks
 - [ ] Order emails
 - [ ] Admin statistics
 - [ ] Angular storefront
