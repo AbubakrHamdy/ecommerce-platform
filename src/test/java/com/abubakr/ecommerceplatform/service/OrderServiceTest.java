@@ -174,6 +174,47 @@ class OrderServiceTest {
         verify(productRepository, never()).releaseStock(anyLong(), anyInt());
     }
 
+    @Test
+    void updateStatus_skippingAStep_isRejected() {
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order(OrderStatus.PENDING)));
+
+        assertThatThrownBy(() -> service.updateStatus(7L, OrderStatus.SHIPPED))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Cannot change order status from PENDING to SHIPPED");
+    }
+
+    @Test
+    void updateStatus_toTheSameStatus_isRejected() {
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order(OrderStatus.PAID)));
+
+        assertThatThrownBy(() -> service.updateStatus(7L, OrderStatus.PAID))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("The order is already PAID");
+    }
+
+    @Test
+    void updateStatus_forwardMove_changesStatusWithoutTouchingStock() {
+        Order order = order(OrderStatus.PAID);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order));
+
+        service.updateStatus(7L, OrderStatus.PROCESSING);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void updateStatus_adminCancelsAPaidOrder_putsStockBack() {
+        Order order = order(OrderStatus.PAID);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order));
+
+        service.updateStatus(7L, OrderStatus.CANCELLED);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(productRepository).releaseStock(1L, 1);
+        verify(productRepository).releaseStock(3L, 2);
+    }
+
     private Order order(OrderStatus status) {
         Order order = Order.builder().status(status).build();
         order.setId(7L);

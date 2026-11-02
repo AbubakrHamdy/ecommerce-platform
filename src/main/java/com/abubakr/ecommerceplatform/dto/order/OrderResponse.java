@@ -12,5 +12,6 @@ public record OrderResponse(
         BigDecimal totalAmount,
         List<OrderItemResponse> items,
         ShippingAddressResponse shippingAddress,
+        String customerEmail,
         Instant createdAt
 ) {}

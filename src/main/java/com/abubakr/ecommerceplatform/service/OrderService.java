@@ -101,12 +101,47 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<OrderSummaryResponse> listAll(OrderStatus status, Pageable pageable) {
+        Pageable sorted = Pageables.withAllowedSort(pageable, SORTABLE_FIELDS);
+        return PageResponse.of((status == null ? orderRepository.findAll(sorted) : orderRepository.findByStatus(status, sorted))
+                .map(orderMapper::toSummary));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getAnyOrder(Long orderId) {
+        return orderMapper.toResponse(findOrder(orderId));
+    }
+
+    @Transactional
+    public OrderResponse updateStatus(Long orderId, OrderStatus next) {
+        Order order = findOrder(orderId);
+        OrderStatus current = order.getStatus();
+        if (current == next) {
+            throw new ConflictException("The order is already " + next);
+        }
+        if (!current.canMoveTo(next)) {
+            throw new ConflictException("Cannot change order status from " + current + " to " + next);
+        }
+        if (next == OrderStatus.CANCELLED) {
+            cancel(order);
+        } else {
+            order.setStatus(next);
+        }
+        return orderMapper.toResponse(order);
+    }
+
     // Puts reserved stock back; products are released in id order, matching checkout, to avoid deadlocks.
     void cancel(Order order) {
         order.setStatus(OrderStatus.CANCELLED);
         order.getItems().stream()
                 .sorted(Comparator.comparing(item -> item.getProduct().getId()))
                 .forEach(item -> productRepository.releaseStock(item.getProduct().getId(), item.getQuantity()));
+    }
+
+    private Order findOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
     }
 
     private Order findOwnOrder(Long userId, Long orderId) {

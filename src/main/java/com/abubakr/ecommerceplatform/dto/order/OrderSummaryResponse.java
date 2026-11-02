@@ -10,5 +10,6 @@ public record OrderSummaryResponse(
         OrderStatus status,
         BigDecimal totalAmount,
         int itemCount,
+        String customerEmail,
         Instant createdAt
 ) {}

@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -45,6 +46,10 @@ public class Order extends BaseEntity {
     // A copy taken at checkout, so later address-book edits never rewrite order history.
     @Embedded
     private ShippingAddress shippingAddress;
+
+    // Two concurrent status changes can't both win: the second one fails instead of silently overwriting.
+    @Version
+    private Long version;
 
     // items are priced snapshots at checkout time; never cascade-removed or merged once persisted
     @Builder.Default

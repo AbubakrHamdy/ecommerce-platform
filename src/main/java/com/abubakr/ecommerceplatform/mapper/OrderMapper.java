@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 @Mapper
 public interface OrderMapper {
 
+    @Mapping(target = "customerEmail", source = "user.email")
     OrderResponse toResponse(Order order);
 
     @Mapping(target = "productId", source = "product.id")
@@ -21,6 +22,7 @@ public interface OrderMapper {
     OrderItemResponse toItemResponse(OrderItem item);
 
     @Mapping(target = "itemCount", expression = "java(itemCount(order))")
+    @Mapping(target = "customerEmail", source = "user.email")
     OrderSummaryResponse toSummary(Order order);
 
     default int itemCount(Order order) {
