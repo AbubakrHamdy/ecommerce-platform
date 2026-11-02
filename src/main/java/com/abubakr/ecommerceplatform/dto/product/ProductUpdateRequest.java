@@ -25,5 +25,6 @@ public record ProductUpdateRequest(
         @NotNull
         Long categoryId,
 
-        boolean active
+        @NotNull
+        Boolean active
 ) {}

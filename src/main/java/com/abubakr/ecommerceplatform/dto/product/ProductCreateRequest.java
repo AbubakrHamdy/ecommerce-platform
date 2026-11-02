@@ -1,5 +1,6 @@
 package com.abubakr.ecommerceplatform.dto.product;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -25,5 +26,6 @@ public record ProductCreateRequest(
         @NotNull
         Long categoryId,
 
-        boolean active
+        @Schema(description = "Defaults to true when omitted")
+        Boolean active
 ) {}

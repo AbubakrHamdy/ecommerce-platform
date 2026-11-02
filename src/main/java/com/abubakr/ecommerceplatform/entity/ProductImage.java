@@ -24,6 +24,10 @@ public class ProductImage extends BaseEntity {
     @Column(nullable = false, length = 500)
     private String url;
 
+    // Null for images hosted elsewhere (e.g. seed data); set for files we uploaded to object storage.
+    @Column(length = 255)
+    private String storageKey;
+
     @Column(nullable = false)
     private boolean isPrimary;
 
