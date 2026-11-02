@@ -215,6 +215,26 @@ class OrderServiceTest {
         verify(productRepository).releaseStock(3L, 2);
     }
 
+    @Test
+    void expireIfStillPending_paidInTheMeantime_isLeftAlone() {
+        Order order = order(OrderStatus.PAID);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order));
+
+        assertThat(service.expireIfStillPending(7L)).isFalse();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void expireIfStillPending_unpaid_isCancelledAndRestocked() {
+        Order order = order(OrderStatus.PENDING);
+        when(orderRepository.findById(7L)).thenReturn(Optional.of(order));
+
+        assertThat(service.expireIfStillPending(7L)).isTrue();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(productRepository).releaseStock(3L, 2);
+    }
+
     private Order order(OrderStatus status) {
         Order order = Order.builder().status(status).build();
         order.setId(7L);

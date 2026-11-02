@@ -131,6 +131,17 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
+    // Called once per order by OrderExpiryJob, each in its own transaction.
+    @Transactional
+    public boolean expireIfStillPending(Long orderId) {
+        Order order = findOrder(orderId);
+        if (order.getStatus() != OrderStatus.PENDING) {
+            return false;
+        }
+        cancel(order);
+        return true;
+    }
+
     // Puts reserved stock back; products are released in id order, matching checkout, to avoid deadlocks.
     void cancel(Order order) {
         order.setStatus(OrderStatus.CANCELLED);
