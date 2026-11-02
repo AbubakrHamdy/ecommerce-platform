@@ -208,9 +208,12 @@ public class PaymobGateway implements PaymentGateway {
                 address.state() == null ? UNKNOWN : address.state(), address.country(), address.postalCode());
     }
 
+    // HTTP/1.1: the JDK client's default HTTP/2 upgrade attempt breaks behind some proxies and buys nothing here.
     private static JdkClientHttpRequestFactory timeoutRequestFactory() {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(10))
+                .build());
         factory.setReadTimeout(Duration.ofSeconds(20));
         return factory;
     }
