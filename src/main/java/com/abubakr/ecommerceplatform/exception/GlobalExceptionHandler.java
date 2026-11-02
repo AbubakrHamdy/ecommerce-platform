@@ -134,6 +134,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);
     }
 
+    @ExceptionHandler(InvalidWebhookException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidWebhook(InvalidWebhookException ex, HttpServletRequest request) {
+        log.warn("Rejected webhook on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "Invalid webhook", request, null);
+    }
+
+    @ExceptionHandler(PaymentProviderException.class)
+    public ResponseEntity<ApiErrorResponse> handlePaymentProvider(PaymentProviderException ex, HttpServletRequest request) {
+        log.error("Payment provider call failed on {}", request.getRequestURI(), ex);
+        return build(HttpStatus.BAD_GATEWAY, "The payment provider is unavailable right now; please try again", request, null);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleServiceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request, null);
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleConflict(ConflictException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);

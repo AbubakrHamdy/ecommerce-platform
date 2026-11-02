@@ -12,5 +12,6 @@ public record PaymentResponse(
         PaymentStatus status,
         String transactionId,
         BigDecimal amount,
+        String currency,
         Instant createdAt
 ) {}
