@@ -1,7 +1,6 @@
 package com.abubakr.ecommerceplatform.service;
 
 import com.abubakr.ecommerceplatform.config.OrderProperties;
-import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -26,8 +25,8 @@ public class OrderExpiryJob {
 
     @Scheduled(fixedDelayString = "${app.orders.expiry-check-interval}")
     public void cancelUnpaidOrders() {
-        Instant cutoff = Instant.now().minus(properties.paymentTimeout());
-        List<Long> candidates = orderRepository.findIdsByStatusCreatedBefore(OrderStatus.PENDING, cutoff);
+        Instant now = Instant.now();
+        List<Long> candidates = orderRepository.findIdsToExpire(now.minus(properties.paymentTimeout()), now);
 
         int cancelled = 0;
         for (Long orderId : candidates) {

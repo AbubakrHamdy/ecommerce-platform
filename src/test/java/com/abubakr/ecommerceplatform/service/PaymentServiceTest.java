@@ -209,6 +209,18 @@ class PaymentServiceTest {
         verify(paymentRepository, never()).markEventProcessed(anyString(), anyString());
     }
 
+    @Test
+    void closeOpenSessions_whenTheOrderIsCancelled_stopsThePaymentPageAcceptingMoney() {
+        Payment open = payment(STRIPE, PaymentStatus.PENDING, Instant.now().plus(Duration.ofMinutes(20)));
+        when(paymentRepository.findByOrderIdAndStatus(7L, PaymentStatus.PENDING)).thenReturn(List.of(open));
+        when(gateways.find(STRIPE)).thenReturn(Optional.of(stripe));
+
+        service.closeOpenSessions(7L);
+
+        assertThat(open.getStatus()).isEqualTo(PaymentStatus.EXPIRED);
+        verify(stripe).expireSession(open);
+    }
+
     private Payment givenWebhook(PaymentEvent event, boolean firstDelivery) {
         Payment payment = payment(STRIPE, PaymentStatus.PENDING, Instant.now().plus(Duration.ofMinutes(20)));
         when(gateways.find(STRIPE)).thenReturn(Optional.of(stripe));

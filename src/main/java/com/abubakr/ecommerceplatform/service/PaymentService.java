@@ -122,6 +122,12 @@ public class PaymentService {
         }
     }
 
+    // Called when an order is cancelled, so its payment pages stop accepting money.
+    @Transactional
+    public void closeOpenSessions(Long orderId) {
+        paymentRepository.findByOrderIdAndStatus(orderId, PaymentStatus.PENDING).forEach(this::closeSession);
+    }
+
     private void recordSuccess(Payment payment, PaymentEvent event) {
         long expectedMinor = Money.toMinorUnits(payment.getAmount(), payment.getCurrency());
         if (event.amountMinor() != expectedMinor || !payment.getCurrency().equalsIgnoreCase(event.currency())) {

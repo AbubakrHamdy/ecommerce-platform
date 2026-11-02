@@ -46,6 +46,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final CacheManager cacheManager;
     private final StoreSettings storeSettings;
+    private final PaymentService paymentService;
 
     @Transactional
     public OrderResponse checkout(Long userId, CheckoutRequest request) {
@@ -151,6 +152,7 @@ public class OrderService {
     // Puts reserved stock back; products are released in id order, matching checkout, to avoid deadlocks.
     void cancel(Order order) {
         order.setStatus(OrderStatus.CANCELLED);
+        paymentService.closeOpenSessions(order.getId());
         order.getItems().stream()
                 .sorted(Comparator.comparing(item -> item.getProduct().getId()))
                 .forEach(item -> {

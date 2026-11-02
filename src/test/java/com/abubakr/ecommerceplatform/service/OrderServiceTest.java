@@ -55,6 +55,7 @@ class OrderServiceTest {
     @Mock private OrderMapper orderMapper;
     @Mock private CacheManager cacheManager;
     @Mock private Cache productCache;
+    @Mock private PaymentService paymentService;
 
     private OrderService service;
     private Cart cart;
@@ -65,7 +66,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper,
-                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)));
+                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)), paymentService);
         User user = User.builder().email("jane@example.com").build();
         user.setId(USER_ID);
         cart = Cart.builder().user(user).build();
@@ -189,6 +190,7 @@ class OrderServiceTest {
         service.cancelMyOrder(USER_ID, 7L);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(paymentService).closeOpenSessions(7L);
         InOrder released = inOrder(productRepository);
         released.verify(productRepository).releaseStock(1L, 1);
         released.verify(productRepository).releaseStock(3L, 2);

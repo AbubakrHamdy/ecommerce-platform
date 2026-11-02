@@ -21,6 +21,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
-    @Query("select o.id from Order o where o.status = :status and o.createdAt < :cutoff order by o.id")
-    List<Long> findIdsByStatusCreatedBefore(@Param("status") OrderStatus status, @Param("cutoff") Instant cutoff);
+    // PENDING orders past the payment window, unless the customer still has an open payment page.
+    @Query("""
+            select o.id from Order o
+            where o.status = com.abubakr.ecommerceplatform.enums.OrderStatus.PENDING
+              and o.createdAt < :cutoff
+              and not exists (
+                  select p.id from Payment p
+                  where p.order = o
+                    and p.status = com.abubakr.ecommerceplatform.enums.PaymentStatus.PENDING
+                    and p.expiresAt > :now)
+            order by o.id""")
+    List<Long> findIdsToExpire(@Param("cutoff") Instant cutoff, @Param("now") Instant now);
 }
