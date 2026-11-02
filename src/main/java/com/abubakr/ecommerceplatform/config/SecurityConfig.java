@@ -43,7 +43,8 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATHS = {
             "/api/v1/products/**",
-            "/api/v1/categories/**"
+            "/api/v1/categories/**",
+            "/api/v1/store"
     };
 
     private final SecurityErrorHandler securityErrorHandler;

@@ -9,6 +9,7 @@ public record OrderSummaryResponse(
         Long id,
         OrderStatus status,
         BigDecimal totalAmount,
+        String currency,
         int itemCount,
         String customerEmail,
         Instant createdAt

@@ -1,6 +1,7 @@
 package com.abubakr.ecommerceplatform.service;
 
 import com.abubakr.ecommerceplatform.config.CacheNames;
+import com.abubakr.ecommerceplatform.config.StoreProperties;
 import com.abubakr.ecommerceplatform.dto.order.CheckoutRequest;
 import com.abubakr.ecommerceplatform.entity.Address;
 import com.abubakr.ecommerceplatform.entity.Cart;
@@ -64,7 +65,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper,
-                cacheManager);
+                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)));
         User user = User.builder().email("jane@example.com").build();
         user.setId(USER_ID);
         cart = Cart.builder().user(user).build();
@@ -126,6 +127,7 @@ class OrderServiceTest {
         Order order = saved.getValue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(order.getTotalAmount()).isEqualByComparingTo("939.97");
+        assertThat(order.getCurrency()).isEqualTo("EGP");
         assertThat(order.getShippingAddress().street()).isEqualTo("123 Tahrir Street");
         assertThat(order.getItems()).extracting("productName").containsExactly("ProBook 14 Laptop", "Wireless Mouse");
         assertThat(order.getItems()).extracting("priceAtPurchase")

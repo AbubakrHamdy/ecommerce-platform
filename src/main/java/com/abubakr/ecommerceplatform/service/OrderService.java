@@ -45,6 +45,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final OrderMapper orderMapper;
     private final CacheManager cacheManager;
+    private final StoreSettings storeSettings;
 
     @Transactional
     public OrderResponse checkout(Long userId, CheckoutRequest request) {
@@ -57,6 +58,7 @@ public class OrderService {
         Order order = Order.builder()
                 .user(cart.getUser())
                 .status(OrderStatus.PENDING)
+                .currency(storeSettings.currencyCode())
                 .shippingAddress(ShippingAddress.copyOf(address))
                 .build();
 

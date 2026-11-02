@@ -10,6 +10,7 @@ public record OrderResponse(
         Long id,
         OrderStatus status,
         BigDecimal totalAmount,
+        String currency,
         List<OrderItemResponse> items,
         ShippingAddressResponse shippingAddress,
         String customerEmail,

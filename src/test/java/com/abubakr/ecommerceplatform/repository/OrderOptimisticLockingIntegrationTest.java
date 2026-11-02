@@ -31,6 +31,7 @@ class OrderOptimisticLockingIntegrationTest {
                 .user(userRepository.findByEmail("customer@example.com").orElseThrow())
                 .status(OrderStatus.PENDING)
                 .totalAmount(BigDecimal.TEN)
+                .currency("EGP")
                 .shippingAddress(new ShippingAddress("1 Test St", "Cairo", null, "11511", "Egypt"))
                 .build()).getId();
 
