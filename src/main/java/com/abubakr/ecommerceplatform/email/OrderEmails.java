@@ -45,8 +45,8 @@ public class OrderEmails {
                 subject = "Order #" + id + " received: complete your payment";
                 content.headline("Thanks for your order, " + firstName + "!")
                         .paragraph("We've reserved your items. Please complete your payment within "
-                                + orderProperties.paymentTimeout().toMinutes()
-                                + " minutes; after that the order is cancelled and the items are released.")
+                                + Durations.humanize(orderProperties.paymentTimeout())
+                                + "; after that the order is cancelled and the items are released.")
                         .items(itemLines(order)).total(total).shippingLines(shippingLines(order))
                         .actionLabel("Complete your payment").actionUrl(emailProperties.orderUrlFor(id));
             }
@@ -93,8 +93,8 @@ public class OrderEmails {
         return switch (reason) {
             case CUSTOMER -> "You cancelled this order. Nothing was charged and the items have been released.";
             case STORE -> "We had to cancel this order. If you already paid, the payment will be refunded to your original payment method.";
-            case PAYMENT_EXPIRED -> "We didn't receive your payment within " + orderProperties.paymentTimeout().toMinutes()
-                    + " minutes, so the order was cancelled and the items were released. You're welcome to order again.";
+            case PAYMENT_EXPIRED -> "We didn't receive your payment within " + Durations.humanize(orderProperties.paymentTimeout())
+                    + ", so the order was cancelled and the items were released. You're welcome to order again.";
         };
     }
 

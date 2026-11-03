@@ -14,8 +14,8 @@ public class AccountEmails {
         EmailContent content = EmailContent.builder()
                 .headline("Reset your password")
                 .paragraph("Hi " + event.firstName() + ", we received a request to reset your password.")
-                .paragraph("The link below expires in " + event.validFor().toMinutes()
-                        + " minutes and can be used once. If you didn't ask for this, you can ignore this email;"
+                .paragraph("The link below expires in " + Durations.humanize(event.validFor())
+                        + " and can be used once. If you didn't ask for this, you can ignore this email;"
                         + " your password won't change.")
                 .actionLabel("Choose a new password")
                 .actionUrl(event.resetLink())
