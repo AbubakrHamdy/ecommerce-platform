@@ -71,7 +71,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper,
-                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)), paymentService, events);
+                cacheManager, new StoreSettings(new StoreProperties("EG", null, null, null)), paymentService, events);
         User user = User.builder().email("jane@example.com").build();
         user.setId(USER_ID);
         cart = Cart.builder().user(user).build();

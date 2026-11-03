@@ -7,5 +7,6 @@ import java.util.List;
 public record StoreResponse(
         String country,
         String currency,
+        String timeZone,
         List<PaymentProvider> paymentProviders
 ) {}

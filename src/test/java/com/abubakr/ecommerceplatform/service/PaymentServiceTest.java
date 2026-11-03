@@ -65,7 +65,7 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
-        StoreSettings bothProviders = new StoreSettings(new StoreProperties("AE", "EGP", List.of(STRIPE, PAYMOB)));
+        StoreSettings bothProviders = new StoreSettings(new StoreProperties("AE", "EGP", List.of(STRIPE, PAYMOB), null));
         service = new PaymentService(orderRepository, paymentRepository, gateways, bothProviders, new PaymentMapperImpl(), events);
         order = Order.builder().status(OrderStatus.PENDING).totalAmount(new BigDecimal("59.97")).currency("EGP").build();
         order.setId(7L);
@@ -123,7 +123,7 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> service.startPayment(USER_ID, 7L, STRIPE)).isInstanceOf(ConflictException.class);
 
         PaymentService egyptOnly = new PaymentService(orderRepository, paymentRepository, gateways,
-                new StoreSettings(new StoreProperties("EG", null, null)), new PaymentMapperImpl(), events);
+                new StoreSettings(new StoreProperties("EG", null, null, null)), new PaymentMapperImpl(), events);
         order.setStatus(OrderStatus.PENDING);
         assertThatThrownBy(() -> egyptOnly.startPayment(USER_ID, 7L, STRIPE))
                 .isInstanceOf(BadRequestException.class)

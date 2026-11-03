@@ -3,6 +3,8 @@ package com.abubakr.ecommerceplatform.service;
 import com.abubakr.ecommerceplatform.config.StoreProperties;
 import org.junit.jupiter.api.Test;
 
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static com.abubakr.ecommerceplatform.enums.PaymentProvider.PAYMOB;
@@ -29,24 +31,34 @@ class StoreSettingsTest {
 
     @Test
     void currencyAndProvidersCanBeOverridden() {
-        StoreSettings settings = new StoreSettings(new StoreProperties("AE", "usd", List.of(STRIPE, PAYMOB)));
+        StoreSettings settings = new StoreSettings(new StoreProperties("AE", "usd", List.of(STRIPE, PAYMOB), null));
 
         assertThat(settings.currencyCode()).isEqualTo("USD");
         assertThat(settings.paymentProviders()).containsExactly(STRIPE, PAYMOB);
     }
 
     @Test
+    void timeZone_defaultsToUtcAndAcceptsIanaIds() {
+        assertThat(new StoreSettings(new StoreProperties("EG", null, null, null)).timeZone()).isEqualTo(ZoneOffset.UTC);
+        assertThat(new StoreSettings(new StoreProperties("EG", null, null, " ")).timeZone()).isEqualTo(ZoneOffset.UTC);
+        assertThat(new StoreSettings(new StoreProperties("EG", null, null, "Africa/Cairo")).timeZone())
+                .isEqualTo(ZoneId.of("Africa/Cairo"));
+    }
+
+    @Test
     void invalidConfiguration_failsAtStartupWithAClearMessage() {
-        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("", null, null)))
+        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("EG", null, null, "Cairo/Egypt")))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("not a time zone id");
+        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("", null, null, null)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("must be set");
-        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("XX", null, null)))
+        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("XX", null, null, null)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("not an ISO 3166");
-        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("EG", "DOLLARS", null)))
+        assertThatThrownBy(() -> new StoreSettings(new StoreProperties("EG", "DOLLARS", null, null)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("not an ISO 4217");
     }
 
     private static void assertStore(String country, String currency, List<?> providers) {
-        StoreSettings settings = new StoreSettings(new StoreProperties(country, null, null));
+        StoreSettings settings = new StoreSettings(new StoreProperties(country, null, null, null));
         assertThat(settings.country()).isEqualTo(country.toUpperCase());
         assertThat(settings.currencyCode()).isEqualTo(currency);
         assertThat(settings.paymentProviders()).isEqualTo(providers);

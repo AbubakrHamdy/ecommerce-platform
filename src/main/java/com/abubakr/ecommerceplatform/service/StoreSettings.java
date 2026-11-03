@@ -5,6 +5,9 @@ import com.abubakr.ecommerceplatform.enums.PaymentProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.Locale;
@@ -19,6 +22,7 @@ public class StoreSettings {
     private final String country;
     private final Currency currency;
     private final List<PaymentProvider> paymentProviders;
+    private final ZoneId timeZone;
 
     public StoreSettings(StoreProperties properties) {
         this.country = validCountry(properties.country());
@@ -28,6 +32,11 @@ public class StoreSettings {
         this.paymentProviders = properties.paymentProviders() == null || properties.paymentProviders().isEmpty()
                 ? defaultProvidersFor(country)
                 : List.copyOf(properties.paymentProviders());
+        this.timeZone = StringUtils.hasText(properties.timeZone()) ? validZone(properties.timeZone()) : ZoneOffset.UTC;
+    }
+
+    public ZoneId timeZone() {
+        return timeZone;
     }
 
     public String country() {
@@ -63,6 +72,14 @@ public class StoreSettings {
             throw new IllegalStateException("Country " + country + " has no official currency; set app.store.currency");
         }
         return currency;
+    }
+
+    private static ZoneId validZone(String id) {
+        try {
+            return ZoneId.of(id.trim());
+        } catch (DateTimeException e) {
+            throw new IllegalStateException("app.store.time-zone '" + id + "' is not a time zone id such as Africa/Cairo", e);
+        }
     }
 
     private static Currency validCurrency(String code) {

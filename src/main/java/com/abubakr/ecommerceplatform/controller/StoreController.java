@@ -27,6 +27,7 @@ public class StoreController {
         return new StoreResponse(
                 storeSettings.country(),
                 storeSettings.currencyCode(),
+                storeSettings.timeZone().getId(),
                 storeSettings.paymentProviders().stream().filter(paymentGateways::isConfigured).toList());
     }
 }
