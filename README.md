@@ -2,7 +2,7 @@
 
 A production-style e-commerce REST API built with **Java 21** and **Spring Boot 4**, with an Angular storefront and admin dashboard planned on top.
 
-> **Status:** in active development. Authentication, catalog, cart, orders and payments are complete; order emails are next. See the [roadmap](#roadmap).
+> **Status:** in active development. Authentication, catalog, cart, orders, payments and order emails are complete; admin statistics are next. See the [roadmap](#roadmap).
 
 ## Features so far
 
@@ -21,6 +21,7 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 - **Stripe and Paymob payments** on hosted pages; the order is marked paid only by a signed webhook ([details](docs/payments.md))
 - **Market-aware setup**: the store's country picks the currency (EG → EGP, US → USD, DE → EUR) and the provider (Paymob for the Middle East, Stripe elsewhere)
 - **Webhook safety**: signature verification with replay protection, database-enforced idempotency, amount and currency checks, and late or duplicate payments flagged for refund
+- **Order emails** (received, receipt, shipped, delivered, cancelled with reason) and admin alerts for payments needing review, sent only after commit, on a dedicated thread pool, with retries ([details](docs/emails.md))
 - **Consistent JSON errors** for validation, 401/403, 404, 409, 413, 415 and unexpected failures
 - **Versioned schema** with Flyway migrations and dev-only seed data
 - **Interactive API docs** with Swagger UI, including an "Authorize" button for tokens
@@ -35,7 +36,7 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 | Caching | Redis 7, Spring Cache |
 | File storage | AWS SDK v2 for S3; RustFS (S3-compatible) for local development |
 | Payments | Stripe (stripe-java SDK), Paymob (Intention API over Spring RestClient) |
-| Email | Spring Mail, async sending, Mailpit for local development |
+| Email | Spring Mail, Thymeleaf HTML + text templates, domain events (after commit), Spring 7 `@Retryable`, Mailpit for local development |
 | Mapping / validation | MapStruct, Jakarta Bean Validation, Lombok |
 | API docs | springdoc-openapi (Swagger UI) |
 | Testing | JUnit 5, Mockito, AssertJ, MockRestServiceServer; integration tests against PostgreSQL; offline payment tests with stripe-mock and WireMock |
@@ -81,8 +82,10 @@ src/main/java/com/abubakr/ecommerceplatform
 ├── config/        Security, JWT, cache, storage, OpenAPI, async and typed properties
 ├── controller/    REST endpoints (public and /admin)
 ├── dto/           Request/response records, grouped by feature
+├── email/         Email templates' content, rendering, sending with retries, event listeners
 ├── entity/        JPA entities
-├── enums/         Role, OrderStatus, PaymentProvider, PaymentStatus, ImageType
+├── enums/         Role, OrderStatus, PaymentProvider, PaymentStatus, CancellationReason, ImageType
+├── event/         Domain events (order status changed, payment needs review, password reset)
 ├── exception/     Custom exceptions and the global exception handler
 ├── mapper/        MapStruct mappers
 ├── repository/    Spring Data repositories and search specifications
@@ -101,6 +104,7 @@ src/main/resources
 - [Catalog](docs/catalog.md): search and filters, categories, image uploads, caching, query performance
 - [Cart & Orders](docs/orders.md): checkout, preventing overselling, snapshots, status flow, expiry, ownership checks
 - [Payments](docs/payments.md): Stripe and Paymob, country-based currency, webhook verification and idempotency, edge cases, test accounts
+- [Emails](docs/emails.md): which emails are sent, after-commit events, templates, delivery and retries
 
 ## Roadmap
 
@@ -109,7 +113,7 @@ src/main/resources
 - [x] Catalog: categories, products, image upload, search and filters, Redis cache
 - [x] Cart and orders: checkout, stock handling, order status flow
 - [x] Payments: Stripe and Paymob, idempotent webhooks
-- [ ] Order emails
+- [x] Order emails
 - [ ] Admin statistics
 - [ ] Angular storefront
 - [ ] Angular admin dashboard
