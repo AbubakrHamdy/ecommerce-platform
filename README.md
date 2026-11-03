@@ -26,6 +26,7 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 - **Consistent JSON errors** for validation, 401/403, 404, 409, 413, 415 and unexpected failures
 - **Versioned schema** with Flyway migrations and dev-only seed data
 - **Interactive API docs** with Swagger UI, including an "Authorize" button for tokens
+- **Postman collection** with every endpoint and seven end-to-end flows with tests, including signed Stripe and Paymob webhooks ([details](postman/README.md))
 
 ## Tech stack
 
@@ -64,6 +65,7 @@ The store defaults to Egypt (`STORE_COUNTRY=EG`, prices in EGP). Reports use cal
 |---|---|
 | Swagger UI | <http://localhost:3330/swagger-ui.html> |
 | OpenAPI spec | <http://localhost:3330/v3/api-docs> |
+| Postman collection | [`postman/`](postman/README.md): import the collection and the local environment |
 | Mailpit (captured emails) | <http://localhost:8025> |
 | RustFS console (uploaded files) | <http://localhost:9001/rustfs/console/>, user `ecommerce`, password `ecommerce-secret` |
 | PostgreSQL | `localhost:5432`, database / user / password: `ecommerce` |
@@ -107,6 +109,7 @@ src/main/resources
 - [Payments](docs/payments.md): Stripe and Paymob, country-based currency, webhook verification and idempotency, edge cases, test accounts
 - [Emails](docs/emails.md): which emails are sent, after-commit events, templates, delivery and retries
 - [Admin statistics](docs/stats.md): what counts as revenue, store-time-zone days, summary, revenue series, top products
+- [Postman collection](postman/README.md): import, automatic sign-in, the seven test flows, webhook signing
 
 ## Roadmap
 
