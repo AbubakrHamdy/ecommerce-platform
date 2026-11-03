@@ -18,6 +18,14 @@ class MoneyTest {
     }
 
     @Test
+    void formatsWithTheCurrencyCodeAndItsOwnDecimals() {
+        assertThat(Money.format(new BigDecimal("1249.5"), "EGP")).isEqualTo("EGP 1,249.50");
+        assertThat(Money.format(new BigDecimal("19.99"), "USD")).isEqualTo("USD 19.99");
+        assertThat(Money.format(new BigDecimal("500"), "JPY")).isEqualTo("JPY 500");
+        assertThat(Money.format(new BigDecimal("1.5"), "KWD")).isEqualTo("KWD 1.500");
+    }
+
+    @Test
     void neverRoundsMoneySilently() {
         assertThatThrownBy(() -> Money.toMinorUnits(new BigDecimal("10.50"), "JPY"))
                 .isInstanceOf(ArithmeticException.class);

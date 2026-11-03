@@ -1,0 +1,18 @@
+[(${storeName})]
+
+[(${content.headline})]
+
+[# th:each="paragraph : ${content.paragraphs}"][(${paragraph})]
+
+[/][# th:if="${!#lists.isEmpty(content.items)}"][# th:each="item : ${content.items}"]- [(${item.name})] x [(${item.quantity})] @ [(${item.unitPrice})] = [(${item.subtotal})]
+[/][# th:if="${content.total != null}"]Total: [(${content.total})]
+[/]
+[/][# th:if="${!#lists.isEmpty(content.details)}"][# th:each="detail : ${content.details}"][(${detail.label})]: [(${detail.value})]
+[/]
+[/][# th:if="${!#lists.isEmpty(content.shippingLines)}"]Shipping to:
+[# th:each="line : ${content.shippingLines}"][(${line})]
+[/]
+[/][# th:if="${content.actionUrl != null}"][(${content.actionLabel})]: [(${content.actionUrl})]
+
+[/]--
+You received this email because of activity on your [(${storeName})] account.
