@@ -8,6 +8,7 @@ import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.enums.PaymentProvider;
 import com.abubakr.ecommerceplatform.enums.PaymentStatus;
 import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
+import com.abubakr.ecommerceplatform.event.PaymentNeedsReview;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.InvalidWebhookException;
@@ -139,6 +140,7 @@ public class PaymentService {
                     .formatted(expectedMinor, payment.getCurrency(), event.amountMinor(), event.currency()));
             log.error("Payment {}: {}. Order {} was NOT marked paid", payment.getId(), payment.getReviewNote(),
                     payment.getOrder().getId());
+            events.publishEvent(new PaymentNeedsReview(payment.getId()));
             return;
         }
 
@@ -154,6 +156,7 @@ public class PaymentService {
             payment.setReviewNote("Order was " + order.getStatus() + " when this payment succeeded; refund required");
             log.error("Payment {} succeeded but order {} is {}: refund required", payment.getId(), order.getId(),
                     order.getStatus());
+            events.publishEvent(new PaymentNeedsReview(payment.getId()));
         }
     }
 

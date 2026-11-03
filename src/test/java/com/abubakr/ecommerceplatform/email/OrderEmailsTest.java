@@ -101,7 +101,7 @@ class OrderEmailsTest {
     }
 
     private static EmailProperties emailProperties() {
-        return new EmailProperties("no-reply@shop.test", "Test Shop", "http://shop/orders/{orderId}");
+        return new EmailProperties("no-reply@shop.test", "Test Shop", "http://shop/orders/{orderId}", "owner@shop.test");
     }
 
     private static SpringTemplateEngine htmlEngine() {

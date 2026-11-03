@@ -3,11 +3,13 @@ package com.abubakr.ecommerceplatform.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 // orderUrl may contain {orderId}; it is the customer's order page in the frontend.
+// admin receives operational alerts (e.g. payments needing a refund); leave empty to disable them.
 @ConfigurationProperties(prefix = "app.mail")
 public record EmailProperties(
         String from,
         String storeName,
-        String orderUrl
+        String orderUrl,
+        String admin
 ) {
 
     public String orderUrlFor(Long orderId) {

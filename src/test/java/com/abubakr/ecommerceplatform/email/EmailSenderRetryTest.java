@@ -82,7 +82,7 @@ class EmailSenderRetryTest {
 
         @Bean
         EmailSender emailSender(JavaMailSender mailSender) {
-            return new EmailSender(mailSender, new EmailProperties("no-reply@shop.test", "Test Shop", "http://shop/{orderId}"));
+            return new EmailSender(mailSender, new EmailProperties("no-reply@shop.test", "Test Shop", "http://shop/{orderId}", "owner@shop.test"));
         }
     }
 }

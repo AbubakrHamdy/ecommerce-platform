@@ -7,6 +7,7 @@ import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.enums.PaymentProvider;
 import com.abubakr.ecommerceplatform.enums.PaymentStatus;
 import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
+import com.abubakr.ecommerceplatform.event.PaymentNeedsReview;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.ServiceUnavailableException;
@@ -148,6 +149,7 @@ class PaymentServiceTest {
         assertThat(payment.getTransactionId()).isEqualTo("pi_1");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         verify(events).publishEvent(OrderStatusChanged.to(7L, OrderStatus.PAID));
+        verify(events, never()).publishEvent(any(PaymentNeedsReview.class));
     }
 
     @Test
@@ -173,6 +175,7 @@ class PaymentServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(payment.getReviewNote()).startsWith("Amount mismatch");
         verify(events, never()).publishEvent(any(OrderStatusChanged.class));
+        verify(events).publishEvent(new PaymentNeedsReview(1L));
     }
 
     @Test
@@ -195,6 +198,7 @@ class PaymentServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(payment.getReviewNote()).contains("refund required");
         verify(events, never()).publishEvent(any(OrderStatusChanged.class));
+        verify(events).publishEvent(new PaymentNeedsReview(1L));
     }
 
     @Test
