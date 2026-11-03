@@ -8,6 +8,9 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 // Read-only aggregations for the admin dashboard. Every query takes a half-open [start, end) range on
@@ -24,8 +27,35 @@ public interface SalesReportRepository extends Repository<Order, Long> {
                                      @Param("start") Instant start,
                                      @Param("end") Instant end);
 
+    // Native because JPQL can't truncate to a day in another time zone. created_at holds UTC wall-clock time:
+    // "at time zone 'UTC'" makes it an instant and "at time zone :zone" turns that into the store's local time.
+    // start and end are UTC LocalDateTimes so the driver compares them with the column as they are.
+    @Query(nativeQuery = true, value = """
+            select cast(date_trunc(:unit, (o.created_at at time zone 'UTC') at time zone :zone) as date) as bucket,
+                   count(*) as orders,
+                   sum(o.total_amount) as amount
+            from orders o
+            where o.currency = :currency and o.status in (:statuses)
+              and o.created_at >= :start and o.created_at < :end
+            group by bucket
+            order by bucket""")
+    List<BucketTotal> salesByBucket(@Param("unit") String unit,
+                                    @Param("zone") String zone,
+                                    @Param("currency") String currency,
+                                    @Param("statuses") Collection<String> statuses,
+                                    @Param("start") LocalDateTime start,
+                                    @Param("end") LocalDateTime end);
+
     interface StatusTotal {
         OrderStatus getStatus();
+
+        Long getOrders();
+
+        BigDecimal getAmount();
+    }
+
+    interface BucketTotal {
+        LocalDate getBucket();
 
         Long getOrders();
 

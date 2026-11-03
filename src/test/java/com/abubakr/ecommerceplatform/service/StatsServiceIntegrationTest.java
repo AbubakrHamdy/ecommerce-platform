@@ -1,9 +1,12 @@
 package com.abubakr.ecommerceplatform.service;
 
+import com.abubakr.ecommerceplatform.dto.stats.RevenuePoint;
+import com.abubakr.ecommerceplatform.dto.stats.RevenueSeriesResponse;
 import com.abubakr.ecommerceplatform.dto.stats.SalesSummaryResponse;
 import com.abubakr.ecommerceplatform.entity.Order;
 import com.abubakr.ecommerceplatform.entity.ShippingAddress;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
+import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.repository.OrderRepository;
 import com.abubakr.ecommerceplatform.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -26,7 +29,11 @@ import static com.abubakr.ecommerceplatform.enums.OrderStatus.PAID;
 import static com.abubakr.ecommerceplatform.enums.OrderStatus.PENDING;
 import static com.abubakr.ecommerceplatform.enums.OrderStatus.PROCESSING;
 import static com.abubakr.ecommerceplatform.enums.OrderStatus.SHIPPED;
+import static com.abubakr.ecommerceplatform.enums.ReportGranularity.DAY;
+import static com.abubakr.ecommerceplatform.enums.ReportGranularity.MONTH;
+import static com.abubakr.ecommerceplatform.enums.ReportGranularity.WEEK;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 // Real PostgreSQL with the dev store (EG, EGP, Africa/Cairo = UTC+2 in 2020). Orders are dated March 2020 so the
 // seed data, which is always recent, never falls inside the reported days.
@@ -94,6 +101,49 @@ class StatsServiceIntegrationTest {
         assertThat(summary.averageOrderValue()).isEqualTo(new BigDecimal("0.00"));
         assertThat(summary.paidOrders()).isZero();
         assertThat(summary.ordersByStatus()).hasSize(OrderStatus.values().length).containsValue(0L).doesNotContainValue(1L);
+    }
+
+    @Test
+    void dailyRevenue_hasOnePointPerDay_includingEmptyDays() {
+        RevenueSeriesResponse series = statsService.revenue(LocalDate.of(2020, 2, 28), LocalDate.of(2020, 3, 3), DAY);
+
+        assertThat(series.currency()).isEqualTo("EGP");
+        assertThat(series.points()).containsExactly(
+                point("2020-02-28", 0, "0.00"),
+                point("2020-02-29", 1, "5.00"),
+                point("2020-03-01", 2, "150.50"),
+                point("2020-03-02", 1, "30.00"),
+                point("2020-03-03", 0, "0.00"));
+    }
+
+    @Test
+    void weeklyRevenue_startsWeeksOnMonday_andOnlyCountsDaysInTheRange() {
+        // 29 February 2020 is a Saturday: its week starts on Monday 24 February and ends with Sunday 1 March.
+        RevenueSeriesResponse series = statsService.revenue(LocalDate.of(2020, 2, 29), MARCH_2, WEEK);
+
+        assertThat(series.points()).containsExactly(
+                point("2020-02-24", 3, "155.50"),
+                point("2020-03-02", 1, "30.00"));
+    }
+
+    @Test
+    void monthlyRevenue_groupsByCalendarMonthInTheStoreTimeZone() {
+        RevenueSeriesResponse series = statsService.revenue(LocalDate.of(2020, 2, 1), LocalDate.of(2020, 3, 31), MONTH);
+
+        assertThat(series.points()).containsExactly(
+                point("2020-02-01", 1, "5.00"),
+                point("2020-03-01", 3, "180.50"));
+    }
+
+    @Test
+    void dailyRevenue_isLimitedToAboutAYear() {
+        assertThatThrownBy(() -> statsService.revenue(LocalDate.of(2019, 1, 1), LocalDate.of(2020, 1, 2), DAY))
+                .isInstanceOf(BadRequestException.class).hasMessageContaining("at most 366");
+        assertThat(statsService.revenue(LocalDate.of(2019, 1, 1), LocalDate.of(2020, 1, 2), WEEK).points()).hasSize(53);
+    }
+
+    private static RevenuePoint point(String date, long paidOrders, String revenue) {
+        return new RevenuePoint(LocalDate.parse(date), paidOrders, new BigDecimal(revenue));
     }
 
     private Long order(OrderStatus status, String total, String currency, String createdAtUtc) {

@@ -1,6 +1,8 @@
 package com.abubakr.ecommerceplatform.controller;
 
+import com.abubakr.ecommerceplatform.dto.stats.RevenueSeriesResponse;
 import com.abubakr.ecommerceplatform.dto.stats.SalesSummaryResponse;
+import com.abubakr.ecommerceplatform.enums.ReportGranularity;
 import com.abubakr.ecommerceplatform.service.StatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -31,5 +33,15 @@ public class AdminStatsController {
             @Parameter(description = "First day, e.g. 2026-10-01") @RequestParam(required = false) LocalDate from,
             @Parameter(description = "Last day, e.g. 2026-10-31") @RequestParam(required = false) LocalDate to) {
         return statsService.summary(from, to);
+    }
+
+    @GetMapping("/revenue")
+    @Operation(summary = "Revenue and paid orders per day, week (from Monday) or month, empty buckets included",
+            description = "DAY covers up to 366 days, WEEK and MONTH up to 5 years.")
+    public RevenueSeriesResponse revenue(
+            @Parameter(description = "First day, e.g. 2026-10-01") @RequestParam(required = false) LocalDate from,
+            @Parameter(description = "Last day, e.g. 2026-10-31") @RequestParam(required = false) LocalDate to,
+            @RequestParam(defaultValue = "DAY") ReportGranularity granularity) {
+        return statsService.revenue(from, to, granularity);
     }
 }
