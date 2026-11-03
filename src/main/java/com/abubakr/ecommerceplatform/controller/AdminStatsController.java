@@ -2,7 +2,9 @@ package com.abubakr.ecommerceplatform.controller;
 
 import com.abubakr.ecommerceplatform.dto.stats.RevenueSeriesResponse;
 import com.abubakr.ecommerceplatform.dto.stats.SalesSummaryResponse;
+import com.abubakr.ecommerceplatform.dto.stats.TopProductsResponse;
 import com.abubakr.ecommerceplatform.enums.ReportGranularity;
+import com.abubakr.ecommerceplatform.enums.TopProductRanking;
 import com.abubakr.ecommerceplatform.service.StatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,5 +45,16 @@ public class AdminStatsController {
             @Parameter(description = "Last day, e.g. 2026-10-31") @RequestParam(required = false) LocalDate to,
             @RequestParam(defaultValue = "DAY") ReportGranularity granularity) {
         return statsService.revenue(from, to, granularity);
+    }
+
+    @GetMapping("/top-products")
+    @Operation(summary = "Best-selling products by revenue or by units sold",
+            description = "limit is 1 to 50. Only paid orders in the store currency count.")
+    public TopProductsResponse topProducts(
+            @Parameter(description = "First day, e.g. 2026-10-01") @RequestParam(required = false) LocalDate from,
+            @Parameter(description = "Last day, e.g. 2026-10-31") @RequestParam(required = false) LocalDate to,
+            @RequestParam(defaultValue = "5") int limit,
+            @RequestParam(defaultValue = "REVENUE") TopProductRanking by) {
+        return statsService.topProducts(from, to, limit, by);
     }
 }

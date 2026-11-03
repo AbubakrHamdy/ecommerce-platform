@@ -2,6 +2,7 @@ package com.abubakr.ecommerceplatform.repository;
 
 import com.abubakr.ecommerceplatform.entity.Order;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -46,6 +47,35 @@ public interface SalesReportRepository extends Repository<Order, Long> {
                                     @Param("start") LocalDateTime start,
                                     @Param("end") LocalDateTime end);
 
+    // Grouped by product id, not by the name snapshot, so a renamed product stays one row.
+    @Query("""
+            select p.id as productId, p.name as productName,
+                   sum(i.quantity) as units, sum(i.priceAtPurchase * i.quantity) as revenue
+            from OrderItem i join i.order o join i.product p
+            where o.currency = :currency and o.status in :statuses
+              and o.createdAt >= :start and o.createdAt < :end
+            group by p.id, p.name
+            order by sum(i.priceAtPurchase * i.quantity) desc, sum(i.quantity) desc, p.id""")
+    List<ProductTotal> topProductsByRevenue(@Param("currency") String currency,
+                                            @Param("statuses") Collection<OrderStatus> statuses,
+                                            @Param("start") Instant start,
+                                            @Param("end") Instant end,
+                                            Limit limit);
+
+    @Query("""
+            select p.id as productId, p.name as productName,
+                   sum(i.quantity) as units, sum(i.priceAtPurchase * i.quantity) as revenue
+            from OrderItem i join i.order o join i.product p
+            where o.currency = :currency and o.status in :statuses
+              and o.createdAt >= :start and o.createdAt < :end
+            group by p.id, p.name
+            order by sum(i.quantity) desc, sum(i.priceAtPurchase * i.quantity) desc, p.id""")
+    List<ProductTotal> topProductsByUnits(@Param("currency") String currency,
+                                          @Param("statuses") Collection<OrderStatus> statuses,
+                                          @Param("start") Instant start,
+                                          @Param("end") Instant end,
+                                          Limit limit);
+
     interface StatusTotal {
         OrderStatus getStatus();
 
@@ -60,5 +90,15 @@ public interface SalesReportRepository extends Repository<Order, Long> {
         Long getOrders();
 
         BigDecimal getAmount();
+    }
+
+    interface ProductTotal {
+        Long getProductId();
+
+        String getProductName();
+
+        Long getUnits();
+
+        BigDecimal getRevenue();
     }
 }

@@ -3,10 +3,15 @@ package com.abubakr.ecommerceplatform.service;
 import com.abubakr.ecommerceplatform.dto.stats.RevenuePoint;
 import com.abubakr.ecommerceplatform.dto.stats.RevenueSeriesResponse;
 import com.abubakr.ecommerceplatform.dto.stats.SalesSummaryResponse;
+import com.abubakr.ecommerceplatform.dto.stats.TopProductResponse;
+import com.abubakr.ecommerceplatform.dto.stats.TopProductsResponse;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.enums.ReportGranularity;
+import com.abubakr.ecommerceplatform.enums.TopProductRanking;
+import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.repository.SalesReportRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +36,10 @@ import java.util.Map;
 public class StatsService {
 
     static final long MAX_SUMMARY_DAYS = 5 * 366;
-    private static final List<String> SALE_STATUSES = Arrays.stream(OrderStatus.values())
-            .filter(OrderStatus::isSale).map(Enum::name).toList();
+    static final int MAX_TOP_PRODUCTS = 50;
+    private static final List<OrderStatus> SALE_STATUSES = Arrays.stream(OrderStatus.values())
+            .filter(OrderStatus::isSale).toList();
+    private static final List<String> SALE_STATUS_NAMES = SALE_STATUSES.stream().map(Enum::name).toList();
 
     private final SalesReportRepository salesReportRepository;
     private final StoreSettings storeSettings;
@@ -71,7 +78,7 @@ public class StatsService {
 
         Map<LocalDate, SalesReportRepository.BucketTotal> totals = new HashMap<>();
         salesReportRepository.salesByBucket(granularity.sqlUnit(), storeSettings.timeZone().getId(), currency,
-                        SALE_STATUSES, utc(period.start()), utc(period.end()))
+                        SALE_STATUS_NAMES, utc(period.start()), utc(period.end()))
                 .forEach(total -> totals.put(total.getBucket(), total));
 
         List<RevenuePoint> points = new ArrayList<>();
@@ -83,6 +90,27 @@ public class StatsService {
                     : new RevenuePoint(bucket, total.getOrders(), total.getAmount().setScale(scale, RoundingMode.HALF_UP)));
         }
         return new RevenueSeriesResponse(period.from(), period.to(), currency, granularity, points);
+    }
+
+    public TopProductsResponse topProducts(LocalDate from, LocalDate to, int limit, TopProductRanking rankedBy) {
+        if (limit < 1 || limit > MAX_TOP_PRODUCTS) {
+            throw new BadRequestException("'limit' must be between 1 and " + MAX_TOP_PRODUCTS);
+        }
+        ReportPeriod period = ReportPeriod.of(from, to, storeSettings.timeZone(), MAX_SUMMARY_DAYS);
+        String currency = storeSettings.currencyCode();
+        int scale = fractionDigits(currency);
+
+        List<SalesReportRepository.ProductTotal> totals = switch (rankedBy) {
+            case REVENUE -> salesReportRepository.topProductsByRevenue(
+                    currency, SALE_STATUSES, period.start(), period.end(), Limit.of(limit));
+            case UNITS -> salesReportRepository.topProductsByUnits(
+                    currency, SALE_STATUSES, period.start(), period.end(), Limit.of(limit));
+        };
+        List<TopProductResponse> products = totals.stream()
+                .map(total -> new TopProductResponse(total.getProductId(), total.getProductName(), total.getUnits(),
+                        total.getRevenue().setScale(scale, RoundingMode.HALF_UP)))
+                .toList();
+        return new TopProductsResponse(period.from(), period.to(), currency, rankedBy, products);
     }
 
     private static LocalDateTime utc(Instant instant) {

@@ -3,23 +3,30 @@ package com.abubakr.ecommerceplatform.service;
 import com.abubakr.ecommerceplatform.dto.stats.RevenuePoint;
 import com.abubakr.ecommerceplatform.dto.stats.RevenueSeriesResponse;
 import com.abubakr.ecommerceplatform.dto.stats.SalesSummaryResponse;
+import com.abubakr.ecommerceplatform.dto.stats.TopProductResponse;
+import com.abubakr.ecommerceplatform.dto.stats.TopProductsResponse;
 import com.abubakr.ecommerceplatform.entity.Order;
+import com.abubakr.ecommerceplatform.entity.OrderItem;
+import com.abubakr.ecommerceplatform.entity.Product;
 import com.abubakr.ecommerceplatform.entity.ShippingAddress;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.repository.OrderRepository;
+import com.abubakr.ecommerceplatform.repository.ProductRepository;
 import com.abubakr.ecommerceplatform.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +39,8 @@ import static com.abubakr.ecommerceplatform.enums.OrderStatus.SHIPPED;
 import static com.abubakr.ecommerceplatform.enums.ReportGranularity.DAY;
 import static com.abubakr.ecommerceplatform.enums.ReportGranularity.MONTH;
 import static com.abubakr.ecommerceplatform.enums.ReportGranularity.WEEK;
+import static com.abubakr.ecommerceplatform.enums.TopProductRanking.REVENUE;
+import static com.abubakr.ecommerceplatform.enums.TopProductRanking.UNITS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -47,20 +56,36 @@ class StatsServiceIntegrationTest {
     @Autowired private StatsService statsService;
     @Autowired private OrderRepository orderRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private ProductRepository productRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
 
     private final List<Long> createdOrders = new ArrayList<>();
+    private Product first;
+    private Product second;
+    private Product third;
 
     @BeforeEach
     void createOrders() {
-        // created_at holds UTC; the comments give the Cairo wall clock.
-        order(PAID, "100.00", "EGP", "2020-03-01 10:00:00");        // 1 March 12:00
-        order(DELIVERED, "50.50", "EGP", "2020-03-01 21:59:59");    // 1 March 23:59:59
-        order(SHIPPED, "30.00", "EGP", "2020-03-01 22:00:00");      // 2 March 00:00, the next day
-        order(PENDING, "999.00", "EGP", "2020-03-01 12:00:00");     // not paid
-        order(CANCELLED, "777.00", "EGP", "2020-03-01 12:00:00");   // not a sale
-        order(PAID, "10.00", "USD", "2020-03-01 12:00:00");         // another currency
-        order(PAID, "5.00", "EGP", "2020-02-29 21:59:59");          // 29 February 23:59:59, the day before
+        List<Product> products = productRepository.findAll(Sort.by("id"));
+        first = products.get(0);
+        second = products.get(1);
+        third = products.get(2);
+
+        // created_at holds UTC; the comments give the Cairo wall clock. Order totals are the sum of their items.
+        order(PAID, "EGP", "2020-03-01 10:00:00",                    // 1 March 12:00: 100.00
+                item(first, 2, "40.00"), item(second, 1, "20.00"));
+        order(DELIVERED, "EGP", "2020-03-01 21:59:59",               // 1 March 23:59:59: 50.50
+                item(second, 5, "10.10"));
+        order(SHIPPED, "EGP", "2020-03-01 22:00:00",                 // 2 March 00:00, the next day: 30.00
+                item(third, 1, "30.00"));
+        order(PENDING, "EGP", "2020-03-01 12:00:00",                 // not paid: 999.00
+                item(third, 10, "99.90"));
+        order(CANCELLED, "EGP", "2020-03-01 12:00:00",               // not a sale: 777.00
+                item(first, 7, "111.00"));
+        order(PAID, "USD", "2020-03-01 12:00:00",                    // another currency: 10.00
+                item(third, 1, "10.00"));
+        order(PAID, "EGP", "2020-02-29 21:59:59",                    // 29 February 23:59:59, the day before: 5.00
+                item(first, 1, "5.00"));
     }
 
     @AfterEach
@@ -146,14 +171,56 @@ class StatsServiceIntegrationTest {
         return new RevenuePoint(LocalDate.parse(date), paidOrders, new BigDecimal(revenue));
     }
 
-    private Long order(OrderStatus status, String total, String currency, String createdAtUtc) {
-        Long id = orderRepository.save(Order.builder()
+    @Test
+    void topProducts_byRevenue_usePaidPricesOfSalesOnly() {
+        TopProductsResponse top = statsService.topProducts(MARCH_1, MARCH_2, 5, REVENUE);
+
+        assertThat(top.products()).containsExactly(
+                new TopProductResponse(first.getId(), first.getName(), 2, new BigDecimal("80.00")),
+                new TopProductResponse(second.getId(), second.getName(), 6, new BigDecimal("70.50")),
+                new TopProductResponse(third.getId(), third.getName(), 1, new BigDecimal("30.00")));
+    }
+
+    @Test
+    void topProducts_byUnits_andLimited() {
+        TopProductsResponse top = statsService.topProducts(MARCH_1, MARCH_2, 2, UNITS);
+
+        assertThat(top.rankedBy()).isEqualTo(UNITS);
+        assertThat(top.products()).extracting(TopProductResponse::productId).containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    void topProducts_limitMustBeReasonable() {
+        assertThatThrownBy(() -> statsService.topProducts(MARCH_1, MARCH_2, 0, REVENUE))
+                .isInstanceOf(BadRequestException.class).hasMessageContaining("between 1 and 50");
+        assertThatThrownBy(() -> statsService.topProducts(MARCH_1, MARCH_2, 51, REVENUE))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    private static OrderItem item(Product product, int quantity, String price) {
+        return OrderItem.builder()
+                .product(product)
+                .productName("snapshot name")
+                .quantity(quantity)
+                .priceAtPurchase(new BigDecimal(price))
+                .build();
+    }
+
+    private Long order(OrderStatus status, String currency, String createdAtUtc, OrderItem... items) {
+        Order order = Order.builder()
                 .user(userRepository.findByEmail("customer@example.com").orElseThrow())
                 .status(status)
-                .totalAmount(new BigDecimal(total))
+                .totalAmount(Arrays.stream(items)
+                        .map(i -> i.getPriceAtPurchase().multiply(BigDecimal.valueOf(i.getQuantity())))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
                 .currency(currency)
                 .shippingAddress(new ShippingAddress("1 Test St", "Cairo", null, "11511", "Egypt"))
-                .build()).getId();
+                .build();
+        for (OrderItem item : items) {
+            item.setOrder(order);
+            order.getItems().add(item);
+        }
+        Long id = orderRepository.save(order).getId();
         // A literal, not a java.sql.Timestamp, so the JVM's zone can't shift it.
         jdbcTemplate.update("update orders set created_at = ?::timestamp where id = ?", createdAtUtc, id);
         createdOrders.add(id);
