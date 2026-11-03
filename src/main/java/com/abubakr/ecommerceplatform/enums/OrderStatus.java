@@ -17,4 +17,9 @@ public enum OrderStatus {
             case DELIVERED, CANCELLED -> false;
         };
     }
+
+    // The customer has paid and the order was not cancelled: this is what reports count as revenue.
+    public boolean isSale() {
+        return this == PAID || this == PROCESSING || this == SHIPPED || this == DELIVERED;
+    }
 }

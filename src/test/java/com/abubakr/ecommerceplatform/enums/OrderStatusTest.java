@@ -40,4 +40,10 @@ class OrderStatusTest {
         assertThat(SHIPPED.canMoveTo(CANCELLED)).isFalse();
         assertThat(DELIVERED.canMoveTo(CANCELLED)).isFalse();
     }
+
+    @Test
+    void onlyPaidAndNotCancelledOrdersCountAsSales() {
+        assertThat(EnumSet.allOf(OrderStatus.class).stream().filter(OrderStatus::isSale))
+                .containsExactly(PAID, PROCESSING, SHIPPED, DELIVERED);
+    }
 }
