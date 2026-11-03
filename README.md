@@ -2,7 +2,7 @@
 
 A production-style e-commerce REST API built with **Java 21** and **Spring Boot 4**, with an Angular storefront and admin dashboard planned on top.
 
-> **Status:** in active development. Authentication, catalog, cart, orders, payments and order emails are complete; admin statistics are next. See the [roadmap](#roadmap).
+> **Status:** in active development. Authentication, catalog, cart, orders, payments, order emails and admin statistics are complete; the Angular storefront is next. See the [roadmap](#roadmap).
 
 ## Features so far
 
@@ -22,6 +22,7 @@ A production-style e-commerce REST API built with **Java 21** and **Spring Boot 
 - **Market-aware setup**: the store's country picks the currency (EG → EGP, US → USD, DE → EUR) and the provider (Paymob for the Middle East, Stripe elsewhere)
 - **Webhook safety**: signature verification with replay protection, database-enforced idempotency, amount and currency checks, and late or duplicate payments flagged for refund
 - **Order emails** (received, receipt, shipped, delivered, cancelled with reason) and admin alerts for payments needing review, sent only after commit, on a dedicated thread pool, with retries ([details](docs/emails.md))
+- **Admin sales reports**: revenue, average order value and order counts by status, revenue per day/week/month with empty days filled in, and top products, all on calendar days in the store time zone ([details](docs/stats.md))
 - **Consistent JSON errors** for validation, 401/403, 404, 409, 413, 415 and unexpected failures
 - **Versioned schema** with Flyway migrations and dev-only seed data
 - **Interactive API docs** with Swagger UI, including an "Authorize" button for tokens
@@ -57,7 +58,7 @@ On Windows use `mvnw.cmd` instead of `./mvnw`. In IntelliJ, set **Active profile
 
 The `dev` profile is required locally: it provides the development JWT secret and storage credentials, creates the image bucket, and loads the seed data.
 
-The store defaults to Egypt (`STORE_COUNTRY=EG`, prices in EGP). Payment providers are offered only once their keys are set as environment variables; see [Payments → Trying it with real test accounts](docs/payments.md#trying-it-with-real-test-accounts).
+The store defaults to Egypt (`STORE_COUNTRY=EG`, prices in EGP). Reports use calendar days in `STORE_TIME_ZONE` (default `Africa/Cairo`). Payment providers are offered only once their keys are set as environment variables; see [Payments → Trying it with real test accounts](docs/payments.md#trying-it-with-real-test-accounts).
 
 | Service | URL |
 |---|---|
@@ -84,14 +85,14 @@ src/main/java/com/abubakr/ecommerceplatform
 ├── dto/           Request/response records, grouped by feature
 ├── email/         Email templates' content, rendering, sending with retries, event listeners
 ├── entity/        JPA entities
-├── enums/         Role, OrderStatus, PaymentProvider, PaymentStatus, CancellationReason, ImageType
+├── enums/         Role, OrderStatus, PaymentProvider, PaymentStatus, CancellationReason, ReportGranularity, …
 ├── event/         Domain events (order status changed, payment needs review, password reset)
 ├── exception/     Custom exceptions and the global exception handler
 ├── mapper/        MapStruct mappers
 ├── repository/    Spring Data repositories and search specifications
 ├── gateway/       Payment provider integrations (Stripe, Paymob) behind one interface
 ├── security/      Token creation, JSON 401/403 handling, @CurrentUserId
-└── service/       Business logic, file storage, scheduled order expiry
+└── service/       Business logic, file storage, scheduled order expiry, sales reports
 
 src/main/resources
 ├── db/migration/  Flyway schema migrations (all environments)
@@ -105,6 +106,7 @@ src/main/resources
 - [Cart & Orders](docs/orders.md): checkout, preventing overselling, snapshots, status flow, expiry, ownership checks
 - [Payments](docs/payments.md): Stripe and Paymob, country-based currency, webhook verification and idempotency, edge cases, test accounts
 - [Emails](docs/emails.md): which emails are sent, after-commit events, templates, delivery and retries
+- [Admin statistics](docs/stats.md): what counts as revenue, store-time-zone days, summary, revenue series, top products
 
 ## Roadmap
 
@@ -114,7 +116,7 @@ src/main/resources
 - [x] Cart and orders: checkout, stock handling, order status flow
 - [x] Payments: Stripe and Paymob, idempotent webhooks
 - [x] Order emails
-- [ ] Admin statistics
+- [x] Admin statistics
 - [ ] Angular storefront
 - [ ] Angular admin dashboard
 - [ ] Integration tests, deployment, live demo

@@ -45,14 +45,14 @@ One deployment serves one country, set with `STORE_COUNTRY` (ISO 3166). Everythi
 `GET /api/v1/store` tells clients what to show:
 
 ```json
-{ "country": "EG", "currency": "EGP", "paymentProviders": ["PAYMOB"] }
+{ "country": "EG", "currency": "EGP", "timeZone": "Africa/Cairo", "paymentProviders": ["PAYMOB"] }
 ```
 
 ## Endpoints
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| `GET` | `/api/v1/store` | Public | Country, currency, available providers |
+| `GET` | `/api/v1/store` | Public | Country, currency, time zone, available providers |
 | `POST` | `/api/v1/orders/{id}/payments` | Customer | `{"provider": "STRIPE"}` (optional; defaults to the store's first provider). Returns `{paymentId, provider, checkoutUrl, expiresAt}`. |
 | `GET` | `/api/v1/orders/{id}/payments` | Customer | Payment attempts for my order |
 | `POST` | `/api/v1/payments/webhooks/stripe` | Signature | Called by Stripe |
@@ -181,6 +181,7 @@ Set these as environment variables (for example in the IntelliJ run configuratio
 | `STORE_COUNTRY` | `EG` | Required; default `EG` |
 | `APP_STORE_CURRENCY` | `USD` | Optional override |
 | `APP_STORE_PAYMENTPROVIDERS` | `PAYMOB,STRIPE` | Optional override |
+| `STORE_TIME_ZONE` | `Africa/Cairo` | Days in [admin reports](stats.md); IANA id, default `Africa/Cairo` |
 | `FRONTEND_URL` | `http://localhost:4200` | Customers return to `{FRONTEND_URL}/orders/{id}?payment=success` |
 | `STRIPE_SECRET_KEY` | `sk_test_…` | Stripe is offered only when this and the next one are set |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | From the Stripe dashboard or `stripe listen` |
