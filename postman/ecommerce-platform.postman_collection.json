@@ -1,0 +1,6750 @@
+{
+	"info": {
+		"_postman_id": "4f6a0c3e-8a71-4d5e-9b0f-1c2d3e4f5a60",
+		"name": "E-commerce Platform API",
+		"description": "REST API of the [e-commerce platform](https://github.com/AbubakrHamdy/ecommerce-platform): auth, catalog, cart, orders, Stripe/Paymob payments and admin reports.\n\n**Setup**\n\n1. `docker compose up -d`, then start the API with the `dev` profile (seed data and accounts).\n2. Import this collection and `local.postman_environment.json`, and select the **E-commerce · local** environment.\n3. Send anything: the collection signs in the seed customer and admin automatically.\n\n**Folders**\n\n- The first folders are a reference: one request per endpoint, with example bodies.\n- The **Flow** folders are scenarios with tests. Run one (or the whole collection) with the Collection Runner; each flow sets up its own data.\n\nFlows create orders and products in your dev database. Flow 2 needs Stripe test keys; Flows 1 and 4 read emails from Mailpit.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Store",
+			"description": "Public settings the storefront needs before showing prices or payment buttons.",
+			"item": [
+				{
+					"name": "Get store settings",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const store = pm.response.json();",
+									"pm.test('Has currency, time zone and providers', () => {",
+									"    pm.expect(store.currency).to.match(/^[A-Z]{3}$/);",
+									"    pm.expect(store.timeZone).to.be.a('string');",
+									"    pm.expect(store.paymentProviders).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/store",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"store"
+							]
+						},
+						"description": "Country, currency, time zone and the payment providers that are configured on this server."
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		},
+		{
+			"name": "Auth",
+			"description": "Registration, sign-in and token handling. Access tokens last 15 minutes; refresh tokens last 7 days and **rotate**: every refresh returns a new pair and the old refresh token stops working.\n\nYou don't need to sign in by hand: the collection signs in the seed customer and admin automatically.",
+			"item": [
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('newUserEmail', `new.user.${Date.now()}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.test('Returns tokens', () => pm.expect(pm.response.json().accessToken).to.be.a('string'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"Secret#2026\",\n  \"firstName\": \"Sara\",\n  \"lastName\": \"Ali\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						},
+						"description": "Creates a CUSTOMER account and signs it in. A fresh email is generated on every send."
+					}
+				},
+				{
+					"name": "Login (customer)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const tokens = pm.response.json();",
+									"pm.test('Bearer tokens', () => pm.expect(tokens.tokenType).to.eql('Bearer'));",
+									"pm.collectionVariables.set('customerToken', tokens.accessToken);",
+									"pm.collectionVariables.set('customerTokenExpiresAt', Date.now() + tokens.expiresIn * 1000);",
+									"pm.collectionVariables.set('refreshToken', tokens.refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Login (admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const tokens = pm.response.json();",
+									"pm.collectionVariables.set('adminToken', tokens.accessToken);",
+									"pm.collectionVariables.set('adminTokenExpiresAt', Date.now() + tokens.expiresIn * 1000);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "My profile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Is the signed-in customer', () => pm.expect(pm.response.json().email).to.eql(pm.variables.get('customerEmail')));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me"
+							]
+						}
+					}
+				},
+				{
+					"name": "Refresh tokens",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const tokens = pm.response.json();",
+									"pm.test('A new refresh token is issued', () => pm.expect(tokens.refreshToken).to.not.eql(pm.collectionVariables.get('refreshToken')));",
+									"pm.collectionVariables.set('customerToken', tokens.accessToken);",
+									"pm.collectionVariables.set('customerTokenExpiresAt', Date.now() + tokens.expiresIn * 1000);",
+									"pm.collectionVariables.set('refreshToken', tokens.refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Run **Login (customer)** first. Each refresh token works once; the response carries the next one."
+					}
+				},
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Deletes the refresh token. The current access token keeps working until it expires (at most 15 minutes)."
+					}
+				},
+				{
+					"name": "Forgot password",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 202', () => pm.response.to.have.status(202));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customerEmail}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"forgot-password"
+							]
+						},
+						"description": "Always answers 202, whether or not the email exists, so accounts can't be discovered. The link arrives in Mailpit (http://localhost:8025)."
+					}
+				},
+				{
+					"name": "Reset password",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('resetToken')) {",
+									"    console.log('Skipped: no resetToken yet (run Flow 4, or paste the token from the email)');",
+									"    pm.execution.skipRequest();",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"NewSecret#2026\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/reset-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"reset-password"
+							]
+						},
+						"description": "Needs the token from the reset email. **Flow 4** reads it from Mailpit and fills `resetToken` for you; without one this request is skipped."
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		},
+		{
+			"name": "Catalog",
+			"description": "Public browsing: categories and product search. No token needed.",
+			"item": [
+				{
+					"name": "List categories",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const categories = pm.response.json();",
+									"pm.test('Returns categories', () => pm.expect(categories).to.be.an('array').that.is.not.empty);",
+									"pm.collectionVariables.set('categoryId', categories[0].id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories"
+							]
+						}
+					}
+				},
+				{
+					"name": "Search products",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const page = pm.response.json();",
+									"pm.test('Is a page of products', () => {",
+									"    pm.expect(page.content).to.be.an('array');",
+									"    pm.expect(page).to.include.keys('page', 'size', 'totalElements', 'totalPages');",
+									"});",
+									"if (page.content.length) pm.collectionVariables.set('productId', page.content[0].id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?page=0&size=20&sort=price,asc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": "laptop",
+									"description": "Matches name or description, case-insensitive",
+									"disabled": true
+								},
+								{
+									"key": "categoryId",
+									"value": "{{categoryId}}",
+									"description": "Includes products in all subcategories",
+									"disabled": true
+								},
+								{
+									"key": "minPrice",
+									"value": "10",
+									"description": "Inclusive",
+									"disabled": true
+								},
+								{
+									"key": "maxPrice",
+									"value": "1000",
+									"description": "Inclusive",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "0",
+									"description": "Zero-based"
+								},
+								{
+									"key": "size",
+									"value": "20",
+									"description": "1 to 100"
+								},
+								{
+									"key": "sort",
+									"value": "price,asc",
+									"description": "name, price or createdAt, with asc or desc"
+								}
+							]
+						},
+						"description": "All filters are optional and can be combined. Enable the ones you want in the Params tab."
+					}
+				},
+				{
+					"name": "Get product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Has images and category', () => pm.expect(pm.response.json()).to.include.keys('images', 'category'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{productId}}"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		},
+		{
+			"name": "Addresses",
+			"description": "The signed-in customer's address book (at most 10). The first address is always the default.",
+			"item": [
+				{
+					"name": "List my addresses",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const addresses = pm.response.json();",
+									"const address = addresses.find(a => a.isDefault) || addresses[0];",
+									"if (address) pm.collectionVariables.set('addressId', address.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add an address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('newAddressId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"street\": \"10 Nile Corniche\",\n  \"city\": \"Giza\",\n  \"state\": \"Giza Governorate\",\n  \"postalCode\": \"12511\",\n  \"country\": \"Egypt\",\n  \"isDefault\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses"
+							]
+						}
+					}
+				},
+				{
+					"name": "Update an address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Street was updated', () => pm.expect(pm.response.json().street).to.eql('12 Nile Corniche'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"street\": \"12 Nile Corniche\",\n  \"city\": \"Giza\",\n  \"state\": \"Giza Governorate\",\n  \"postalCode\": \"12511\",\n  \"country\": \"Egypt\",\n  \"isDefault\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses/{{newAddressId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses",
+								"{{newAddressId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete an address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses/{{newAddressId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses",
+								"{{newAddressId}}"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Cart",
+			"description": "One cart per customer. Adding a product that is already in the cart increases its quantity.",
+			"item": [
+				{
+					"name": "Get my cart",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add an item",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const productId = Number(pm.collectionVariables.get('productId'));",
+									"const line = pm.response.json().items.find(i => i.product.id === productId);",
+									"pm.test('The product is in the cart', () => pm.expect(line).to.exist);",
+									"pm.collectionVariables.set('cartItemId', line.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items"
+							]
+						}
+					}
+				},
+				{
+					"name": "Change the quantity",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": 2\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items/{{cartItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items",
+								"{{cartItemId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Remove an item",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items/{{cartItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items",
+								"{{cartItemId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Empty the cart",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Orders",
+			"description": "Checkout and the customer's own orders. Another customer's order returns 404, as if it didn't exist.",
+			"item": [
+				{
+					"name": "Checkout",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const headers = { Authorization: 'Bearer ' + pm.collectionVariables.get('customerToken'), 'Content-Type': 'application/json' };",
+									"pm.sendRequest({ url: baseUrl + '/api/v1/cart/items', method: 'POST', header: headers,",
+									"    body: { mode: 'raw', raw: JSON.stringify({ productId: Number(pm.collectionVariables.get('productId')), quantity: 1 }) } },",
+									"    (err, res) => { if (err || res.code !== 200) console.warn('Could not add the product to the cart', err || res.code); });",
+									"if (!pm.collectionVariables.get('addressId')) {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/users/me/addresses', header: headers }, (err, res) => {",
+									"        const address = res.json().find(a => a.isDefault) || res.json()[0];",
+									"        if (address) pm.collectionVariables.set('addressId', address.id);",
+									"    });",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const order = pm.response.json();",
+									"const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"pm.collectionVariables.set('orderId', order.id);",
+									"pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"pm.collectionVariables.set('orderCurrency', order.currency);",
+									"pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"addressId\": {{addressId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"description": "Puts `{{productId}}` in the cart first, so this works on its own. Saves `orderId` for the requests below and for Payments."
+					}
+				},
+				{
+					"name": "My orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders?page=0&size=20&sort=createdAt,desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt,desc"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get my order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Cancel my order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is CANCELLED', () => pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"cancel"
+							]
+						},
+						"description": "Only PENDING orders. The reserved stock goes back and any open payment page is closed."
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Payments",
+			"description": "Customers pay on the provider's hosted page; the order becomes PAID only when a **signed webhook** arrives.\n\n- Starting a payment needs provider keys on the server (503 if they aren't configured). If `orderId` isn't a PENDING order, the pre-request script checks out a new one.\n- The webhook requests sign a test event with `stripeWebhookSecret` / `paymobHmacSecret` from the environment, which must equal the server's secrets. Without them the requests are skipped.",
+			"item": [
+				{
+					"name": "Start payment (store default provider)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const headers = { Authorization: 'Bearer ' + pm.collectionVariables.get('customerToken'), 'Content-Type': 'application/json' };",
+									"const raw = (body) => ({ mode: 'raw', raw: JSON.stringify(body) });",
+									"const checkoutNewOrder = () => {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/users/me/addresses', header: headers }, (err, addresses) => {",
+									"        const address = addresses.json().find(a => a.isDefault) || addresses.json()[0];",
+									"        const item = { productId: Number(pm.collectionVariables.get('productId')), quantity: 1 };",
+									"        pm.sendRequest({ url: baseUrl + '/api/v1/cart/items', method: 'POST', header: headers, body: raw(item) }, () => {",
+									"            pm.sendRequest({ url: baseUrl + '/api/v1/orders', method: 'POST', header: headers, body: raw({ addressId: address.id }) }, (err, res) => {",
+									"                const order = res.json();",
+									"                const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"                pm.collectionVariables.set('orderId', order.id);",
+									"                pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"                pm.collectionVariables.set('orderCurrency', order.currency);",
+									"                pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"            });",
+									"        });",
+									"    });",
+									"};",
+									"const orderId = pm.collectionVariables.get('orderId');",
+									"if (!orderId) {",
+									"    checkoutNewOrder();",
+									"} else {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/orders/' + orderId, header: headers }, (err, res) => {",
+									"        if (res.code !== 200 || res.json().status !== 'PENDING') checkoutNewOrder();",
+									"    });",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Payment page created, or 503 when the provider is not configured', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+									"if (pm.response.code === 200) {",
+									"    pm.collectionVariables.set('paymentId', pm.response.json().paymentId);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						},
+						"description": "No body: the store's first configured provider is used (see `GET /api/v1/store`). Open `checkoutUrl` in a browser to pay."
+					}
+				},
+				{
+					"name": "Start payment with Stripe",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const headers = { Authorization: 'Bearer ' + pm.collectionVariables.get('customerToken'), 'Content-Type': 'application/json' };",
+									"const raw = (body) => ({ mode: 'raw', raw: JSON.stringify(body) });",
+									"const checkoutNewOrder = () => {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/users/me/addresses', header: headers }, (err, addresses) => {",
+									"        const address = addresses.json().find(a => a.isDefault) || addresses.json()[0];",
+									"        const item = { productId: Number(pm.collectionVariables.get('productId')), quantity: 1 };",
+									"        pm.sendRequest({ url: baseUrl + '/api/v1/cart/items', method: 'POST', header: headers, body: raw(item) }, () => {",
+									"            pm.sendRequest({ url: baseUrl + '/api/v1/orders', method: 'POST', header: headers, body: raw({ addressId: address.id }) }, (err, res) => {",
+									"                const order = res.json();",
+									"                const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"                pm.collectionVariables.set('orderId', order.id);",
+									"                pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"                pm.collectionVariables.set('orderCurrency', order.currency);",
+									"                pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"            });",
+									"        });",
+									"    });",
+									"};",
+									"const orderId = pm.collectionVariables.get('orderId');",
+									"if (!orderId) {",
+									"    checkoutNewOrder();",
+									"} else {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/orders/' + orderId, header: headers }, (err, res) => {",
+									"        if (res.code !== 200 || res.json().status !== 'PENDING') checkoutNewOrder();",
+									"    });",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Payment page created, or 503 when the provider is not configured', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+									"if (pm.response.code === 200) {",
+									"    const session = pm.response.json();",
+									"    pm.test('A Stripe checkout page was created', () => {",
+									"        pm.expect(session.provider).to.eql('STRIPE');",
+									"        pm.expect(session.checkoutUrl).to.be.a('string');",
+									"    });",
+									"    // Stripe puts the Checkout Session id in the page URL; the webhook refers to it.",
+									"    const match = (session.checkoutUrl || '').match(/cs_[A-Za-z0-9_]+/);",
+									"    pm.test('The checkout URL contains the session id', () => pm.expect(match).to.not.be.null);",
+									"    if (match) pm.collectionVariables.set('stripeSessionId', match[0]);",
+									"    pm.collectionVariables.set('paymentId', session.paymentId);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider\": \"STRIPE\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						},
+						"description": "Saves `stripeSessionId` from the checkout URL for the Stripe webhook below. Test card: 4242 4242 4242 4242."
+					}
+				},
+				{
+					"name": "Start payment with Paymob",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const headers = { Authorization: 'Bearer ' + pm.collectionVariables.get('customerToken'), 'Content-Type': 'application/json' };",
+									"const raw = (body) => ({ mode: 'raw', raw: JSON.stringify(body) });",
+									"const checkoutNewOrder = () => {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/users/me/addresses', header: headers }, (err, addresses) => {",
+									"        const address = addresses.json().find(a => a.isDefault) || addresses.json()[0];",
+									"        const item = { productId: Number(pm.collectionVariables.get('productId')), quantity: 1 };",
+									"        pm.sendRequest({ url: baseUrl + '/api/v1/cart/items', method: 'POST', header: headers, body: raw(item) }, () => {",
+									"            pm.sendRequest({ url: baseUrl + '/api/v1/orders', method: 'POST', header: headers, body: raw({ addressId: address.id }) }, (err, res) => {",
+									"                const order = res.json();",
+									"                const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"                pm.collectionVariables.set('orderId', order.id);",
+									"                pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"                pm.collectionVariables.set('orderCurrency', order.currency);",
+									"                pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"            });",
+									"        });",
+									"    });",
+									"};",
+									"const orderId = pm.collectionVariables.get('orderId');",
+									"if (!orderId) {",
+									"    checkoutNewOrder();",
+									"} else {",
+									"    pm.sendRequest({ url: baseUrl + '/api/v1/orders/' + orderId, header: headers }, (err, res) => {",
+									"        if (res.code !== 200 || res.json().status !== 'PENDING') checkoutNewOrder();",
+									"    });",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Payment page created, or 503 when the provider is not configured', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));",
+									"if (pm.response.code === 200) {",
+									"    pm.collectionVariables.set('paymentId', pm.response.json().paymentId);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider\": \"PAYMOB\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Payment attempts of my order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Returns a list', () => pm.expect(pm.response.json()).to.be.an('array'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Stripe webhook: payment completed (signed test event)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const secret = pm.environment.get('stripeWebhookSecret');",
+									"const sign = (body) => {",
+									"    const timestamp = Math.floor(Date.now() / 1000);",
+									"    const signature = CryptoJS.HmacSHA256(timestamp + '.' + body, secret).toString(CryptoJS.enc.Hex);",
+									"    pm.collectionVariables.set('stripeEventBody', body);",
+									"    pm.collectionVariables.set('stripeSignature', `t=${timestamp},v1=${signature}`);",
+									"};",
+									"const sessionId = pm.collectionVariables.get('stripeSessionId');",
+									"if (!secret || !sessionId) {",
+									"    console.log('Skipped: set stripeWebhookSecret in the environment (= server STRIPE_WEBHOOK_SECRET) and start a Stripe payment first');",
+									"    pm.execution.skipRequest();",
+									"} else {",
+									"    // The shape Stripe sends for a completed Checkout Session; only these fields are read by the server.",
+									"    const event = {",
+									"        id: 'evt_postman_' + Date.now(),",
+									"        object: 'event',",
+									"        api_version: '2020-08-27',",
+									"        type: 'checkout.session.completed',",
+									"        data: {",
+									"            object: {",
+									"                id: sessionId,",
+									"                object: 'checkout.session',",
+									"                amount_total: Number(pm.collectionVariables.get('orderTotalMinor')),",
+									"                currency: String(pm.collectionVariables.get('orderCurrency')).toLowerCase(),",
+									"                payment_status: 'paid',",
+									"                payment_intent: 'pi_postman_' + Date.now()",
+									"            }",
+									"        }",
+									"    };",
+									"    sign(JSON.stringify(event));",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Stripe-Signature",
+								"value": "{{stripeSignature}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{stripeEventBody}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/stripe",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"stripe"
+							]
+						},
+						"description": "Simulates Stripe calling the server after a successful payment, signed like Stripe does (`Stripe-Signature: t=…,v1=HMAC-SHA256`). Uses `stripeSessionId`, `orderTotalMinor` and `orderCurrency`.\n\nWith real Stripe test keys you can instead pay on the hosted page and forward the real webhook with `stripe listen`."
+					}
+				},
+				{
+					"name": "Paymob webhook: transaction succeeded (signed test callback)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const secret = pm.environment.get('paymobHmacSecret');",
+									"const paymobOrderId = pm.collectionVariables.get('paymobOrderId');",
+									"if (!secret || !paymobOrderId) {",
+									"    console.log('Skipped: set paymobHmacSecret in the environment (= server PAYMOB_HMAC_SECRET) and the paymobOrderId collection variable');",
+									"    pm.execution.skipRequest();",
+									"}",
+									"const transaction = {",
+									"    id: Date.now(),",
+									"    pending: false,",
+									"    amount_cents: Number(pm.collectionVariables.get('orderTotalMinor')),",
+									"    success: true,",
+									"    is_auth: false,",
+									"    is_capture: false,",
+									"    is_standalone_payment: true,",
+									"    is_voided: false,",
+									"    is_refunded: false,",
+									"    is_3d_secure: true,",
+									"    integration_id: 1,",
+									"    has_parent_transaction: false,",
+									"    created_at: new Date().toISOString(),",
+									"    currency: String(pm.collectionVariables.get('orderCurrency')).toUpperCase(),",
+									"    error_occured: false,",
+									"    owner: 1,",
+									"    order: { id: Number(paymobOrderId) },",
+									"    source_data: { pan: '2346', sub_type: 'MasterCard', type: 'card' }",
+									"};",
+									"// Same fields, same order as Paymob (and the server) use for the HMAC.",
+									"const fields = ['amount_cents', 'created_at', 'currency', 'error_occured', 'has_parent_transaction', 'id',",
+									"    'integration_id', 'is_3d_secure', 'is_auth', 'is_capture', 'is_refunded', 'is_standalone_payment',",
+									"    'is_voided', 'order.id', 'owner', 'pending', 'source_data.pan', 'source_data.sub_type',",
+									"    'source_data.type', 'success'];",
+									"const concatenated = fields",
+									"    .map(f => f.split('.').reduce((node, key) => (node == null ? undefined : node[key]), transaction))",
+									"    .filter(v => v !== undefined)",
+									"    .map(String)",
+									"    .join('');",
+									"pm.collectionVariables.set('paymobCallbackBody', JSON.stringify({ type: 'TRANSACTION', obj: transaction }));",
+									"pm.collectionVariables.set('paymobHmac', CryptoJS.HmacSHA512(concatenated, secret || '').toString(CryptoJS.enc.Hex));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{{paymobCallbackBody}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/paymob?hmac={{paymobHmac}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"paymob"
+							],
+							"query": [
+								{
+									"key": "hmac",
+									"value": "{{paymobHmac}}"
+								}
+							]
+						},
+						"description": "Simulates Paymob's transaction callback with the `?hmac=` signature (HMAC-SHA512 over Paymob's fixed list of fields).\n\nSet `paymobOrderId` to the Paymob order id of the payment (the `provider_session_id` column of `payments`)."
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Admin: Categories",
+			"description": "Admin token required. A category can't be deleted while it has subcategories or products.",
+			"item": [
+				{
+					"name": "Create a category",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('newCategoryName', 'Accessories ' + Date.now());"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('newCategoryId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{newCategoryName}}\",\n  \"parentId\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						}
+					}
+				},
+				{
+					"name": "Rename or move a category",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{newCategoryName}} (renamed)\",\n  \"parentId\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/{{newCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"{{newCategoryId}}"
+							]
+						},
+						"description": "Set `parentId` to move it under another category, or null for top level."
+					}
+				},
+				{
+					"name": "Delete a category",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/{{newCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"{{newCategoryId}}"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{adminToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Admin: Products",
+			"description": "Admin token required. Deleting a product **archives** it: customers stop seeing it, but past orders keep pointing to it.\n\nFor **Upload an image**, set Postman's working directory (Settings → General) to the repository root, or pick any JPEG/PNG/WebP in the Body tab.",
+			"item": [
+				{
+					"name": "Search products (including archived)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": "laptop",
+									"description": "Name or description",
+									"disabled": true
+								},
+								{
+									"key": "active",
+									"value": "false",
+									"description": "true = on sale, false = archived; omit for both",
+									"disabled": true
+								},
+								{
+									"key": "categoryId",
+									"value": "{{categoryId}}",
+									"description": "Includes subcategories",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get any product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{productId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{productId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create a product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('newProductId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Bluetooth Speaker {{$timestamp}}\",\n  \"description\": \"Portable speaker with 12 hours of battery.\",\n  \"price\": 49.99,\n  \"stock\": 30,\n  \"categoryId\": {{categoryId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products"
+							]
+						},
+						"description": "`active` defaults to true. Price has at most 2 decimals."
+					}
+				},
+				{
+					"name": "Update a product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Bluetooth Speaker (2nd gen)\",\n  \"description\": \"Portable speaker with 20 hours of battery.\",\n  \"price\": 59.99,\n  \"stock\": 25,\n  \"categoryId\": {{categoryId}},\n  \"active\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}"
+							]
+						},
+						"description": "Full update: every field is required, including `active`."
+					}
+				},
+				{
+					"name": "Upload an image",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('imageId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "postman/sample-product.png"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}/images",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}",
+								"images"
+							]
+						},
+						"description": "Multipart field `file`, up to 5 MB. The type is checked from the file's content, not its name. The first image becomes the primary one."
+					}
+				},
+				{
+					"name": "Delete an image",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}/images/{{imageId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}",
+								"images",
+								"{{imageId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Archive a product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{adminToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Admin: Orders",
+			"description": "Admin token required. Allowed status moves:\n\nPENDING → PAID or CANCELLED · PAID → PROCESSING or CANCELLED · PROCESSING → SHIPPED or CANCELLED · SHIPPED → DELIVERED\n\nAny other move returns 409. Cancelling puts the stock back.",
+			"item": [
+				{
+					"name": "List all orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders?page=0&size=20&sort=createdAt,desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "PAID",
+									"description": "PENDING, PAID, PROCESSING, SHIPPED, DELIVERED or CANCELLED",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt,desc"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Orders waiting to ship",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders?status=PAID&sort=createdAt,asc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "PAID"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt,asc"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get any order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Shows the customer email', () => pm.expect(pm.response.json().customerEmail).to.be.a('string'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Change order status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Moved, or 409 when the order is past PENDING', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PAID\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						},
+						"description": "Change the body to the next status. Moves that the flow above doesn't allow return 409 with the reason."
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{adminToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Admin: Stats",
+			"description": "Sales reports for the dashboard. Revenue counts PAID, PROCESSING, SHIPPED and DELIVERED orders in the store currency.\n\n`from` and `to` are calendar days in the store time zone, both inclusive. Without them, reports cover the last 30 days.",
+			"item": [
+				{
+					"name": "Sales summary",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const summary = pm.response.json();",
+									"pm.test('Has revenue and every status', () => {",
+									"    pm.expect(summary).to.include.keys('revenue', 'paidOrders', 'averageOrderValue');",
+									"    pm.expect(Object.keys(summary.ordersByStatus)).to.have.lengthOf(6);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/summary",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"summary"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-10-01",
+									"description": "First day (inclusive)",
+									"disabled": true
+								},
+								{
+									"key": "to",
+									"value": "2026-10-31",
+									"description": "Last day (inclusive)",
+									"disabled": true
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Revenue per day",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('One point per day', () => pm.expect(pm.response.json().points).to.have.lengthOf(30));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/revenue?granularity=DAY",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"revenue"
+							],
+							"query": [
+								{
+									"key": "granularity",
+									"value": "DAY",
+									"description": "DAY (up to 366 days), WEEK or MONTH (up to 5 years)"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Revenue per week",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('quarterStart', new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Weeks start on Monday', () => pm.response.json().points.forEach(p => pm.expect(new Date(p.date + 'T00:00:00Z').getUTCDay()).to.eql(1)));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/revenue?granularity=WEEK&from={{quarterStart}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"revenue"
+							],
+							"query": [
+								{
+									"key": "granularity",
+									"value": "WEEK"
+								},
+								{
+									"key": "from",
+									"value": "{{quarterStart}}",
+									"description": "Set to 90 days ago by the pre-request script"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Revenue per month (this year)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const today = new Date().toISOString().slice(0, 10);",
+									"pm.collectionVariables.set('today', today);",
+									"pm.collectionVariables.set('yearStart', today.slice(0, 4) + '-01-01');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/revenue?granularity=MONTH&from={{yearStart}}&to={{today}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"revenue"
+							],
+							"query": [
+								{
+									"key": "granularity",
+									"value": "MONTH"
+								},
+								{
+									"key": "from",
+									"value": "{{yearStart}}"
+								},
+								{
+									"key": "to",
+									"value": "{{today}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Top products by revenue",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/top-products?limit=5&by=REVENUE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"top-products"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "5",
+									"description": "1 to 50"
+								},
+								{
+									"key": "by",
+									"value": "REVENUE"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Top products by units sold",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const products = pm.response.json().products;",
+									"pm.test('Sorted by units, highest first', () => {",
+									"    for (let i = 1; i < products.length; i++) pm.expect(products[i - 1].unitsSold).to.be.at.least(products[i].unitsSold);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/top-products?limit=5&by=UNITS",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"top-products"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "5"
+								},
+								{
+									"key": "by",
+									"value": "UNITS"
+								}
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{adminToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Flow 1 · Buy, pay and deliver",
+			"description": "The whole life of an order without a payment provider: the admin marks it paid by hand.\n\nChecks stock reservation, the status flow, what the customer may still do, the effect on the sales report and the emails in Mailpit.",
+			"item": [
+				{
+					"name": "Pick a product in stock",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const products = pm.response.json().content.filter(p => p.active && p.stock >= 5);",
+									"pm.test('A product has enough stock', () => pm.expect(products).to.not.be.empty);",
+									"const product = products.sort((a, b) => b.stock - a.stock)[0];",
+									"pm.collectionVariables.set('productId', product.id);",
+									"pm.collectionVariables.set('productPrice', product.price);",
+									"pm.collectionVariables.set('stockBefore', product.stock);",
+									"console.log(`Using \"${product.name}\" (id ${product.id}, stock ${product.stock})`);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Chooses the active product with the most stock, so the flow can buy a few units."
+					}
+				},
+				{
+					"name": "Find my default address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const addresses = pm.response.json();",
+									"pm.test('The customer has an address', () => pm.expect(addresses).to.not.be.empty);",
+									"const address = addresses.find(a => a.isDefault) || addresses[0];",
+									"pm.collectionVariables.set('addressId', address.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses"
+							]
+						}
+					}
+				},
+				{
+					"name": "Empty the cart",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add 2 to the cart",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('cartQuantity', 2);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const cart = pm.response.json();",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"const price = Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('One line with the right quantity', () => {",
+									"    pm.expect(cart.items).to.have.lengthOf(1);",
+									"    pm.expect(cart.items[0].quantity).to.eql(quantity);",
+									"});",
+									"pm.test('Total is quantity × price', () => pm.expect(Number(cart.totalPrice)).to.be.closeTo(quantity * price, 0.001));",
+									"pm.collectionVariables.set('cartItemId', cart.items[0].id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items"
+							]
+						}
+					}
+				},
+				{
+					"name": "Sales summary before",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('revenueBefore', pm.response.json().revenue);",
+									"pm.collectionVariables.set('paidOrdersBefore', pm.response.json().paidOrders);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/summary",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"summary"
+							]
+						}
+					}
+				},
+				{
+					"name": "Checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const order = pm.response.json();",
+									"const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"pm.collectionVariables.set('orderId', order.id);",
+									"pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"pm.collectionVariables.set('orderCurrency', order.currency);",
+									"pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"pm.test('The order is PENDING in the store currency', () => {",
+									"    pm.expect(order.status).to.eql('PENDING');",
+									"    pm.expect(order.currency).to.match(/^[A-Z]{3}$/);",
+									"});",
+									"const expected = Number(pm.collectionVariables.get('cartQuantity')) * Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('Total matches the cart', () => pm.expect(Number(order.totalAmount)).to.be.closeTo(expected, 0.001));",
+									"pm.test('Prices and address are snapshotted', () => {",
+									"    pm.expect(order.items[0].productName).to.be.a('string');",
+									"    pm.expect(order.shippingAddress.city).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"addressId\": {{addressId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"description": "Turns the cart into a PENDING order, reserves the stock and empties the cart."
+					}
+				},
+				{
+					"name": "Stock is reserved at checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const before = Number(pm.collectionVariables.get('stockBefore'));",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"pm.test('Stock is before - quantity', () => pm.expect(pm.response.json().stock).to.eql(before - quantity));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{productId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "The cart is empty after checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('No items left', () => pm.expect(pm.response.json().items).to.be.empty);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin marks it PAID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is PAID', () => pm.expect(pm.response.json().status).to.eql('PAID'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PAID\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "A paid order can't be cancelled by the customer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Only pending orders can be cancelled'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"cancel"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin moves it to PROCESSING",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is PROCESSING', () => pm.expect(pm.response.json().status).to.eql('PROCESSING'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PROCESSING\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin ships it",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is SHIPPED', () => pm.expect(pm.response.json().status).to.eql('SHIPPED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"SHIPPED\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin marks it DELIVERED",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is DELIVERED', () => pm.expect(pm.response.json().status).to.eql('DELIVERED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"DELIVERED\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "A delivered order can't change",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Cannot change order status from DELIVERED to CANCELLED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"CANCELLED\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "The customer sees it DELIVERED",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is DELIVERED', () => pm.expect(pm.response.json().status).to.eql('DELIVERED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "It's in my order history",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const orders = pm.response.json().content;",
+									"const mine = orders.find(o => o.id === Number(pm.collectionVariables.get('orderId')));",
+									"pm.test('Among my latest orders, DELIVERED', () => pm.expect(mine.status).to.eql('DELIVERED'));",
+									"pm.test('Newest first', () => pm.expect(orders.map(o => o.createdAt)).to.eql(orders.map(o => o.createdAt).sort().reverse()));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders?size=5&sort=createdAt,desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "size",
+									"value": "5"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt,desc"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Sales summary after",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const summary = pm.response.json();",
+									"const added = Number(summary.revenue) - Number(pm.collectionVariables.get('revenueBefore'));",
+									"pm.test('Revenue grew by the order total', () => pm.expect(added).to.be.closeTo(Number(pm.collectionVariables.get('orderTotal')), 0.001));",
+									"pm.test('One more paid order', () => pm.expect(summary.paidOrders).to.eql(Number(pm.collectionVariables.get('paidOrdersBefore')) + 1));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/summary",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"summary"
+							]
+						}
+					}
+				},
+				{
+					"name": "Today's revenue includes it",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const today = pm.response.json().points.slice(-1)[0];",
+									"pm.test('Today has at least this order', () => pm.expect(Number(today.revenue)).to.be.at.least(Number(pm.collectionVariables.get('orderTotal'))));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/revenue?granularity=DAY",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"revenue"
+							],
+							"query": [
+								{
+									"key": "granularity",
+									"value": "DAY"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Top products include it",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const productId = Number(pm.collectionVariables.get('productId'));",
+									"pm.test('The product is ranked', () => pm.expect(pm.response.json().products.map(p => p.productId)).to.include(productId));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/top-products?limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"top-products"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "The customer got the order emails",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"setTimeout(() => {}, 3000); // emails are sent in the background after each change"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const orderId = pm.collectionVariables.get('orderId');",
+									"const pattern = new RegExp('#' + orderId + '(?![0-9])');",
+									"const subjects = pm.response.json().messages.map(m => m.Subject).filter(s => pattern.test(s));",
+									"console.log(subjects);",
+									"pm.test('Four emails for this order', () => pm.expect(subjects).to.have.lengthOf(4));",
+									"pm.test('Including the receipt and the delivery notice', () => {",
+									"    pm.expect(subjects.some(s => s.startsWith('Payment received'))).to.be.true;",
+									"    pm.expect(subjects.some(s => s.includes('was delivered'))).to.be.true;",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{mailpitUrl}}/api/v1/search?query=to:{{customerEmail}}&limit=100",
+							"host": [
+								"{{mailpitUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"search"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "to:{{customerEmail}}"
+								},
+								{
+									"key": "limit",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Reads Mailpit (docker compose). Expects: order received, payment received, shipped and delivered. PROCESSING sends nothing."
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Flow 2 · Pay with Stripe (signed webhook)",
+			"description": "Needs Stripe on the server (`STRIPE_SECRET_KEY` with a test key) and `stripeWebhookSecret` in this environment equal to the server's `STRIPE_WEBHOOK_SECRET`. Otherwise the Runner skips to Flow 3.\n\nChecks that only a correctly signed webhook marks the order paid, and that Stripe retrying the same event changes nothing.",
+			"item": [
+				{
+					"name": "Is Stripe configured?",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const goTo = (name) => (pm.execution && pm.execution.setNextRequest ? pm.execution.setNextRequest(name) : postman.setNextRequest(name));",
+									"const offered = pm.response.json().paymentProviders.includes('STRIPE');",
+									"const secret = pm.environment.get('stripeWebhookSecret');",
+									"if (!offered || !secret) {",
+									"    console.log('Stripe is not configured (server keys or stripeWebhookSecret missing): skipping Flow 2');",
+									"    pm.test.skip('Stripe flow', () => {});",
+									"    goTo('Pick a product to cancel');",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/store",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"store"
+							]
+						}
+					}
+				},
+				{
+					"name": "Pick a product to pay for",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const products = pm.response.json().content.filter(p => p.active && p.stock >= 5);",
+									"pm.test('A product has enough stock', () => pm.expect(products).to.not.be.empty);",
+									"const product = products.sort((a, b) => b.stock - a.stock)[0];",
+									"pm.collectionVariables.set('productId', product.id);",
+									"pm.collectionVariables.set('productPrice', product.price);",
+									"pm.collectionVariables.set('stockBefore', product.stock);",
+									"console.log(`Using \"${product.name}\" (id ${product.id}, stock ${product.stock})`);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Chooses the active product with the most stock, so the flow can buy a few units."
+					}
+				},
+				{
+					"name": "Find my default address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const addresses = pm.response.json();",
+									"pm.test('The customer has an address', () => pm.expect(addresses).to.not.be.empty);",
+									"const address = addresses.find(a => a.isDefault) || addresses[0];",
+									"pm.collectionVariables.set('addressId', address.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses"
+							]
+						}
+					}
+				},
+				{
+					"name": "Empty the cart",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add 1 to the cart",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('cartQuantity', 1);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const cart = pm.response.json();",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"const price = Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('One line with the right quantity', () => {",
+									"    pm.expect(cart.items).to.have.lengthOf(1);",
+									"    pm.expect(cart.items[0].quantity).to.eql(quantity);",
+									"});",
+									"pm.test('Total is quantity × price', () => pm.expect(Number(cart.totalPrice)).to.be.closeTo(quantity * price, 0.001));",
+									"pm.collectionVariables.set('cartItemId', cart.items[0].id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items"
+							]
+						}
+					}
+				},
+				{
+					"name": "Checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const order = pm.response.json();",
+									"const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"pm.collectionVariables.set('orderId', order.id);",
+									"pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"pm.collectionVariables.set('orderCurrency', order.currency);",
+									"pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"pm.test('The order is PENDING in the store currency', () => {",
+									"    pm.expect(order.status).to.eql('PENDING');",
+									"    pm.expect(order.currency).to.match(/^[A-Z]{3}$/);",
+									"});",
+									"const expected = Number(pm.collectionVariables.get('cartQuantity')) * Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('Total matches the cart', () => pm.expect(Number(order.totalAmount)).to.be.closeTo(expected, 0.001));",
+									"pm.test('Prices and address are snapshotted', () => {",
+									"    pm.expect(order.items[0].productName).to.be.a('string');",
+									"    pm.expect(order.shippingAddress.city).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"addressId\": {{addressId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"description": "Turns the cart into a PENDING order, reserves the stock and empties the cart."
+					}
+				},
+				{
+					"name": "Start a Stripe payment",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const session = pm.response.json();",
+									"pm.test('A Stripe checkout page was created', () => {",
+									"    pm.expect(session.provider).to.eql('STRIPE');",
+									"    pm.expect(session.checkoutUrl).to.be.a('string');",
+									"});",
+									"// Stripe puts the Checkout Session id in the page URL; the webhook refers to it.",
+									"const match = (session.checkoutUrl || '').match(/cs_[A-Za-z0-9_]+/);",
+									"pm.test('The checkout URL contains the session id', () => pm.expect(match).to.not.be.null);",
+									"if (match) pm.collectionVariables.set('stripeSessionId', match[0]);",
+									"pm.collectionVariables.set('paymentId', session.paymentId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider\": \"STRIPE\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						}
+					}
+				},
+				{
+					"name": "The payment is pending",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('One PENDING payment', () => pm.expect(pm.response.json().map(p => p.status)).to.eql(['PENDING']));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						}
+					}
+				},
+				{
+					"name": "Stripe calls the webhook: checkout.session.completed",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const secret = pm.environment.get('stripeWebhookSecret');",
+									"const sign = (body) => {",
+									"    const timestamp = Math.floor(Date.now() / 1000);",
+									"    const signature = CryptoJS.HmacSHA256(timestamp + '.' + body, secret).toString(CryptoJS.enc.Hex);",
+									"    pm.collectionVariables.set('stripeEventBody', body);",
+									"    pm.collectionVariables.set('stripeSignature', `t=${timestamp},v1=${signature}`);",
+									"};",
+									"const sessionId = pm.collectionVariables.get('stripeSessionId');",
+									"if (!secret || !sessionId) {",
+									"    console.log('Skipped: set stripeWebhookSecret in the environment (= server STRIPE_WEBHOOK_SECRET) and start a Stripe payment first');",
+									"    pm.execution.skipRequest();",
+									"} else {",
+									"    // The shape Stripe sends for a completed Checkout Session; only these fields are read by the server.",
+									"    const event = {",
+									"        id: 'evt_postman_' + Date.now(),",
+									"        object: 'event',",
+									"        api_version: '2020-08-27',",
+									"        type: 'checkout.session.completed',",
+									"        data: {",
+									"            object: {",
+									"                id: sessionId,",
+									"                object: 'checkout.session',",
+									"                amount_total: Number(pm.collectionVariables.get('orderTotalMinor')),",
+									"                currency: String(pm.collectionVariables.get('orderCurrency')).toLowerCase(),",
+									"                payment_status: 'paid',",
+									"                payment_intent: 'pi_postman_' + Date.now()",
+									"            }",
+									"        }",
+									"    };",
+									"    sign(JSON.stringify(event));",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Stripe-Signature",
+								"value": "{{stripeSignature}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{stripeEventBody}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/stripe",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"stripe"
+							]
+						}
+					}
+				},
+				{
+					"name": "The order is PAID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is PAID', () => pm.expect(pm.response.json().status).to.eql('PAID'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Stripe retries the same event",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const secret = pm.environment.get('stripeWebhookSecret');",
+									"const sign = (body) => {",
+									"    const timestamp = Math.floor(Date.now() / 1000);",
+									"    const signature = CryptoJS.HmacSHA256(timestamp + '.' + body, secret).toString(CryptoJS.enc.Hex);",
+									"    pm.collectionVariables.set('stripeEventBody', body);",
+									"    pm.collectionVariables.set('stripeSignature', `t=${timestamp},v1=${signature}`);",
+									"};",
+									"if (!secret) {",
+									"    pm.execution.skipRequest();",
+									"} else {",
+									"    sign(pm.collectionVariables.get('stripeEventBody'));",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Stripe-Signature",
+								"value": "{{stripeSignature}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{stripeEventBody}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/stripe",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"stripe"
+							]
+						},
+						"description": "Same event id, signed again with a new timestamp. The server records each event once."
+					}
+				},
+				{
+					"name": "Still exactly one successful payment",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const payments = pm.response.json();",
+									"pm.test('One SUCCEEDED payment with a transaction id', () => {",
+									"    pm.expect(payments).to.have.lengthOf(1);",
+									"    pm.expect(payments[0].status).to.eql('SUCCEEDED');",
+									"    pm.expect(payments[0].transactionId).to.match(/^pi_postman_/);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"payments"
+							]
+						}
+					}
+				},
+				{
+					"name": "A forged signature is rejected",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Invalid webhook'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Stripe-Signature",
+								"value": "t=1700000000,v1=forged"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{stripeEventBody}}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/stripe",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"stripe"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Flow 3 · Cancel an unpaid order and get the stock back",
+			"description": "Stock is reserved at checkout and released when the customer cancels. Cancelled is final.",
+			"item": [
+				{
+					"name": "Pick a product to cancel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const products = pm.response.json().content.filter(p => p.active && p.stock >= 5);",
+									"pm.test('A product has enough stock', () => pm.expect(products).to.not.be.empty);",
+									"const product = products.sort((a, b) => b.stock - a.stock)[0];",
+									"pm.collectionVariables.set('productId', product.id);",
+									"pm.collectionVariables.set('productPrice', product.price);",
+									"pm.collectionVariables.set('stockBefore', product.stock);",
+									"console.log(`Using \"${product.name}\" (id ${product.id}, stock ${product.stock})`);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Chooses the active product with the most stock, so the flow can buy a few units."
+					}
+				},
+				{
+					"name": "Find my default address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const addresses = pm.response.json();",
+									"pm.test('The customer has an address', () => pm.expect(addresses).to.not.be.empty);",
+									"const address = addresses.find(a => a.isDefault) || addresses[0];",
+									"pm.collectionVariables.set('addressId', address.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/addresses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"addresses"
+							]
+						}
+					}
+				},
+				{
+					"name": "Empty the cart",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add 3 to the cart",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('cartQuantity', 3);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const cart = pm.response.json();",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"const price = Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('One line with the right quantity', () => {",
+									"    pm.expect(cart.items).to.have.lengthOf(1);",
+									"    pm.expect(cart.items[0].quantity).to.eql(quantity);",
+									"});",
+									"pm.test('Total is quantity × price', () => pm.expect(Number(cart.totalPrice)).to.be.closeTo(quantity * price, 0.001));",
+									"pm.collectionVariables.set('cartItemId', cart.items[0].id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 3\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items"
+							]
+						}
+					}
+				},
+				{
+					"name": "Checkout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const order = pm.response.json();",
+									"const digits = { JPY: 0, KRW: 0, KWD: 3, BHD: 3, OMR: 3, JOD: 3, TND: 3 }[order.currency] ?? 2;",
+									"pm.collectionVariables.set('orderId', order.id);",
+									"pm.collectionVariables.set('orderTotal', order.totalAmount);",
+									"pm.collectionVariables.set('orderCurrency', order.currency);",
+									"pm.collectionVariables.set('orderTotalMinor', Math.round(Number(order.totalAmount) * Math.pow(10, digits)));",
+									"pm.test('The order is PENDING in the store currency', () => {",
+									"    pm.expect(order.status).to.eql('PENDING');",
+									"    pm.expect(order.currency).to.match(/^[A-Z]{3}$/);",
+									"});",
+									"const expected = Number(pm.collectionVariables.get('cartQuantity')) * Number(pm.collectionVariables.get('productPrice'));",
+									"pm.test('Total matches the cart', () => pm.expect(Number(order.totalAmount)).to.be.closeTo(expected, 0.001));",
+									"pm.test('Prices and address are snapshotted', () => {",
+									"    pm.expect(order.items[0].productName).to.be.a('string');",
+									"    pm.expect(order.shippingAddress.city).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"addressId\": {{addressId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders"
+							]
+						},
+						"description": "Turns the cart into a PENDING order, reserves the stock and empties the cart."
+					}
+				},
+				{
+					"name": "Stock went down",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const before = Number(pm.collectionVariables.get('stockBefore'));",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"pm.test('Stock is before - quantity', () => pm.expect(pm.response.json().stock).to.eql(before - quantity));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{productId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "The customer cancels",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Order is CANCELLED', () => pm.expect(pm.response.json().status).to.eql('CANCELLED'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"cancel"
+							]
+						}
+					}
+				},
+				{
+					"name": "The stock is back",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const before = Number(pm.collectionVariables.get('stockBefore'));",
+									"const quantity = Number(pm.collectionVariables.get('cartQuantity'));",
+									"pm.test('Stock is before', () => pm.expect(pm.response.json().stock).to.eql(before));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{productId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Cancelling twice is refused",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Only pending orders can be cancelled'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{orderId}}",
+								"cancel"
+							]
+						}
+					}
+				},
+				{
+					"name": "A cancelled order can't be paid",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Cannot change order status from CANCELLED to PAID'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PAID\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{orderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "The admin sees it under CANCELLED",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Listed', () => pm.expect(pm.response.json().content.map(o => o.id)).to.include(Number(pm.collectionVariables.get('orderId'))));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders?status=CANCELLED&size=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "CANCELLED"
+								},
+								{
+									"key": "size",
+									"value": "50"
+								}
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{customerToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Flow 4 · Forgot password, reset by email",
+			"description": "A new customer asks for a reset link, the flow reads it from Mailpit (docker compose), sets a new password, and checks that the link works only once. The seed accounts are never changed.",
+			"item": [
+				{
+					"name": "Register a new customer",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('flowEmail', `reset.${Date.now()}@example.com`);",
+									"pm.collectionVariables.set('flowPassword', 'FirstPass#2026');",
+									"pm.collectionVariables.set('flowNewPassword', 'SecondPass#2026');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const tokens = pm.response.json();",
+									"pm.test('Returns an access and a refresh token', () => {",
+									"    pm.expect(tokens.accessToken).to.be.a('string');",
+									"    pm.expect(tokens.refreshToken).to.be.a('string');",
+									"});",
+									"pm.collectionVariables.set('flowAccessToken', tokens.accessToken);",
+									"pm.collectionVariables.set('flowRefreshToken', tokens.refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{flowPassword}}\",\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Tester\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					}
+				},
+				{
+					"name": "Ask for a reset link",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('mailAttempts', 0);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 202', () => pm.response.to.have.status(202));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"forgot-password"
+							]
+						}
+					}
+				},
+				{
+					"name": "Unknown emails get the same answer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 202', () => pm.response.to.have.status(202));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"nobody.{{$timestamp}}@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"forgot-password"
+							]
+						},
+						"description": "So nobody can find out which emails have accounts."
+					}
+				},
+				{
+					"name": "Find the reset email in Mailpit",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"setTimeout(() => {}, 1500);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const goTo = (name) => (pm.execution && pm.execution.setNextRequest ? pm.execution.setNextRequest(name) : postman.setNextRequest(name));",
+									"const message = pm.response.json().messages.find(m => m.Subject === 'Reset your password');",
+									"const attempts = Number(pm.collectionVariables.get('mailAttempts') || 0);",
+									"if (!message && attempts < 5) {",
+									"    pm.collectionVariables.set('mailAttempts', attempts + 1);",
+									"    goTo(pm.info.requestName);",
+									"} else {",
+									"    pm.test('The reset email arrived', () => pm.expect(message).to.exist);",
+									"    if (message) pm.collectionVariables.set('mailId', message.ID);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{mailpitUrl}}/api/v1/search?query=to:{{flowEmail}}",
+							"host": [
+								"{{mailpitUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"search"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "to:{{flowEmail}}"
+								}
+							]
+						},
+						"description": "Retried up to 5 times in the Runner while the email is on its way."
+					}
+				},
+				{
+					"name": "Read the link from the email",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const match = (pm.response.json().Text || '').match(/token=([A-Za-z0-9_-]+)/);",
+									"pm.test('The email contains a reset link', () => pm.expect(match).to.not.be.null);",
+									"pm.collectionVariables.set('resetToken', match[1]);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+							"host": [
+								"{{mailpitUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"message",
+								"{{mailId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Set a new password",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{flowNewPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/reset-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"reset-password"
+							]
+						}
+					}
+				},
+				{
+					"name": "The old password no longer works",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Invalid email or password'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{flowPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "The new password works",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('flowRefreshToken', pm.response.json().refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{flowNewPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "The link works only once",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Reset link is invalid or has expired'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"ThirdPass#2026\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/reset-password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"reset-password"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		},
+		{
+			"name": "Flow 5 · Refresh tokens: rotation and theft detection",
+			"description": "Every refresh returns a new pair and retires the old refresh token. If a retired token comes back, someone copied it: the server signs out **every** session of that user.",
+			"item": [
+				{
+					"name": "Register a new customer (gets tokens)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('flowEmail', `session.${Date.now()}@example.com`);",
+									"pm.collectionVariables.set('flowPassword', 'FirstPass#2026');",
+									"pm.collectionVariables.set('flowNewPassword', 'SecondPass#2026');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const tokens = pm.response.json();",
+									"pm.test('Returns an access and a refresh token', () => {",
+									"    pm.expect(tokens.accessToken).to.be.a('string');",
+									"    pm.expect(tokens.refreshToken).to.be.a('string');",
+									"});",
+									"pm.collectionVariables.set('flowAccessToken', tokens.accessToken);",
+									"pm.collectionVariables.set('flowRefreshToken', tokens.refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{flowPassword}}\",\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Tester\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					}
+				},
+				{
+					"name": "Refresh: get a new pair",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"const tokens = pm.response.json();",
+									"pm.test('A different refresh token', () => pm.expect(tokens.refreshToken).to.not.eql(pm.collectionVariables.get('flowRefreshToken')));",
+									"pm.collectionVariables.set('flowOldRefreshToken', pm.collectionVariables.get('flowRefreshToken'));",
+									"pm.collectionVariables.set('flowRefreshToken', tokens.refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{flowRefreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
+					}
+				},
+				{
+					"name": "Replaying the old token is detected",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('already used'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{flowOldRefreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
+					}
+				},
+				{
+					"name": "Every session was signed out, even the newest",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{flowRefreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
+					}
+				},
+				{
+					"name": "Access tokens keep working until they expire",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Same user', () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get('flowEmail')));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{flowAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me"
+							]
+						},
+						"description": "That's why access tokens are short-lived (15 minutes)."
+					}
+				},
+				{
+					"name": "Sign in again",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('flowRefreshToken', pm.response.json().refreshToken);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{flowPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Log out",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{flowRefreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"logout"
+							]
+						}
+					}
+				},
+				{
+					"name": "A logged-out token is simply invalid",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Invalid refresh token'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{flowRefreshToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		},
+		{
+			"name": "Flow 6 · Admin manages the catalog",
+			"description": "Categories with subcategories, a new product, archiving and the deletion rules. Leaves a small category and an archived product behind, each with a unique name.",
+			"item": [
+				{
+					"name": "Create a top-level category",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set('flowCategoryName', 'Postman ' + Date.now());"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('parentCategoryId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{flowCategoryName}}\",\n  \"parentId\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create a subcategory",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const category = pm.response.json();",
+									"pm.test('Under the new category', () => pm.expect(category.parentName).to.eql(pm.collectionVariables.get('flowCategoryName')));",
+									"pm.collectionVariables.set('subCategoryId', category.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Speakers\",\n  \"parentId\": {{parentCategoryId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						}
+					}
+				},
+				{
+					"name": "Names are unique under one parent",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('already exists'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Speakers\",\n  \"parentId\": {{parentCategoryId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories"
+							]
+						}
+					}
+				},
+				{
+					"name": "A category with subcategories can't be deleted",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('has subcategories'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/{{parentCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"{{parentCategoryId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create a product in the subcategory",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', () => pm.response.to.have.status(201));",
+									"const product = pm.response.json();",
+									"pm.test('On sale by default', () => pm.expect(product.active).to.be.true);",
+									"pm.collectionVariables.set('newProductId', product.id);",
+									"pm.collectionVariables.set('newProductName', product.name);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Postman Speaker {{$timestamp}}\",\n  \"description\": \"Created by Flow 6.\",\n  \"price\": 49.99,\n  \"stock\": 30,\n  \"categoryId\": {{subCategoryId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products"
+							]
+						}
+					}
+				},
+				{
+					"name": "Customers can't manage products",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 403', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Not allowed\",\n  \"price\": 1,\n  \"stock\": 1,\n  \"categoryId\": {{subCategoryId}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products"
+							]
+						}
+					}
+				},
+				{
+					"name": "Searching the parent category finds it",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Found through the parent', () => pm.expect(pm.response.json().content.map(p => p.id)).to.include(Number(pm.collectionVariables.get('newProductId'))));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?categoryId={{parentCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "categoryId",
+									"value": "{{parentCategoryId}}"
+								}
+							]
+						},
+						"description": "Category filters include all subcategories."
+					}
+				},
+				{
+					"name": "Change price and stock",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('New price', () => pm.expect(Number(pm.response.json().price)).to.eql(39.99));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{newProductName}}\",\n  \"description\": \"Created by Flow 6.\",\n  \"price\": 39.99,\n  \"stock\": 10,\n  \"categoryId\": {{subCategoryId}},\n  \"active\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Customers see the new price",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Not a stale cached price', () => pm.expect(Number(pm.response.json().price)).to.eql(39.99));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{newProductId}}"
+							]
+						},
+						"description": "Product pages are cached in Redis; the update evicted the old copy."
+					}
+				},
+				{
+					"name": "Archive the product",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 204', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Archived products are hidden from customers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 404', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"{{newProductId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admins still see it, archived",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', () => pm.response.to.have.status(200));",
+									"pm.test('Not active', () => pm.expect(pm.response.json().active).to.be.false);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{newProductId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{newProductId}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "A category with products can't be deleted",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('still has products'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/categories/{{subCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"categories",
+								"{{subCategoryId}}"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{adminToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
+			"name": "Flow 7 · Security and error handling",
+			"description": "Every error comes back as the same JSON shape (`status`, `message`, and `fieldErrors` for validation).",
+			"item": [
+				{
+					"name": "No token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "A forged token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.forged",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart"
+							]
+						}
+					}
+				},
+				{
+					"name": "A customer on an admin endpoint → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 403', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders"
+							]
+						}
+					}
+				},
+				{
+					"name": "Wrong password → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Invalid email or password'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"wrong-password\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Email already registered → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 409', () => pm.response.to.have.status(409));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('already exists'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"Secret#2026\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Again\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					}
+				},
+				{
+					"name": "Validation errors name each field → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"const fields = pm.response.json().fieldErrors.map(e => e.field);",
+									"pm.test('email, password and firstName are reported', () => pm.expect(fields).to.include.members(['email', 'password', 'firstName']));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"not-an-email\",\n  \"password\": \"short\",\n  \"firstName\": \"\",\n  \"lastName\": \"X\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					}
+				},
+				{
+					"name": "Malformed JSON → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{ \"email\":",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					}
+				},
+				{
+					"name": "Another customer's order → 404",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"pm.sendRequest({ url: baseUrl + '/api/v1/orders?size=1',",
+									"    header: { Authorization: 'Bearer ' + pm.collectionVariables.get('customerToken') } }, (err, res) => {",
+									"    const orders = res.json().content;",
+									"    pm.collectionVariables.set('otherOrderId', orders.length ? orders[0].id : 1);",
+									"});",
+									"pm.sendRequest({ url: baseUrl + '/api/v1/auth/register', method: 'POST', header: { 'Content-Type': 'application/json' },",
+									"    body: { mode: 'raw', raw: JSON.stringify({ email: `stranger.${Date.now()}@example.com`, password: 'Secret#2026', firstName: 'Other', lastName: 'Customer' }) } },",
+									"    (err, res) => pm.collectionVariables.set('strangerToken', res.json().accessToken));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 404', () => pm.response.to.have.status(404));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Order not found'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{strangerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/orders/{{otherOrderId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"orders",
+								"{{otherOrderId}}"
+							]
+						},
+						"description": "The pre-request script registers a second customer and looks up the seed customer's latest order. Not 403: the API doesn't reveal that the order exists."
+					}
+				},
+				{
+					"name": "Unknown product → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 404', () => pm.response.to.have.status(404));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Product not found'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products/999999999",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products",
+								"999999999"
+							]
+						}
+					}
+				},
+				{
+					"name": "More than 99 of one product → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"pm.test('quantity is reported', () => pm.expect(pm.response.json().fieldErrors.map(e => e.field)).to.include('quantity'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 100\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/cart/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"cart",
+								"items"
+							]
+						}
+					}
+				},
+				{
+					"name": "Unknown order status → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('status'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"LOST\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/orders/{{otherOrderId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"orders",
+								"{{otherOrderId}}",
+								"status"
+							]
+						}
+					}
+				},
+				{
+					"name": "Report period backwards → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('must not be after'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats/summary?from=2026-10-10&to=2026-10-01",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"stats",
+								"summary"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-10-10"
+								},
+								{
+									"key": "to",
+									"value": "2026-10-01"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Unsigned webhook → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 400', () => pm.response.to.have.status(400));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Invalid webhook'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/stripe",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"stripe"
+							]
+						}
+					}
+				},
+				{
+					"name": "Unknown payment provider → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 404', () => pm.response.to.have.status(404));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('Unknown payment provider'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/payments/webhooks/paypal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"payments",
+								"webhooks",
+								"paypal"
+							]
+						}
+					}
+				},
+				{
+					"name": "Unknown endpoint without a token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 401', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/nothing-here",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"nothing-here"
+							]
+						},
+						"description": "Anonymous callers can't probe which paths exist."
+					}
+				},
+				{
+					"name": "Unknown endpoint when signed in → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 404', () => pm.response.to.have.status(404));",
+									"pm.test('Message explains the problem', () => pm.expect(pm.response.json().message).to.include('No endpoint found'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/nothing-here",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"nothing-here"
+							]
+						}
+					}
+				}
+			],
+			"auth": {
+				"type": "noauth"
+			}
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{customerToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Signs in the seed customer and admin whenever their access token is missing or about to expire,",
+					"// so any request can be sent on its own. Tokens are kept in collection variables, not in the environment.",
+					"const baseUrl = pm.variables.get('baseUrl');",
+					"[",
+					"    { prefix: 'customer', email: pm.variables.get('customerEmail'), password: pm.variables.get('customerPassword') },",
+					"    { prefix: 'admin', email: pm.variables.get('adminEmail'), password: pm.variables.get('adminPassword') }",
+					"].forEach(({ prefix, email, password }) => {",
+					"    const token = pm.collectionVariables.get(prefix + 'Token');",
+					"    const expiresAt = Number(pm.collectionVariables.get(prefix + 'TokenExpiresAt') || 0);",
+					"    if ((token && Date.now() < expiresAt - 60 * 1000) || !email || !password) {",
+					"        return;",
+					"    }",
+					"    pm.sendRequest({",
+					"        url: baseUrl + '/api/v1/auth/login',",
+					"        method: 'POST',",
+					"        header: { 'Content-Type': 'application/json' },",
+					"        body: { mode: 'raw', raw: JSON.stringify({ email, password }) }",
+					"    }, (err, res) => {",
+					"        if (err || res.code !== 200) {",
+					"            console.warn(`Automatic sign-in as ${email} failed: ${err || res.code}`);",
+					"            return;",
+					"        }",
+					"        const tokens = res.json();",
+					"        pm.collectionVariables.set(prefix + 'Token', tokens.accessToken);",
+					"        pm.collectionVariables.set(prefix + 'TokenExpiresAt', Date.now() + tokens.expiresIn * 1000);",
+					"    });",
+					"});"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Every API error has the same JSON shape.",
+					"const isApi = pm.request.url.toString().includes('/api/v1/') && !pm.request.url.toString().includes('/api/v1/search') && !pm.request.url.toString().includes('/api/v1/message');",
+					"if (isApi && pm.response.code >= 400) {",
+					"    pm.test('Error body has status and message', () => {",
+					"        const body = pm.response.json();",
+					"        pm.expect(body.status).to.eql(pm.response.code);",
+					"        pm.expect(body.message).to.be.a('string');",
+					"    });",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "customerToken",
+			"value": ""
+		},
+		{
+			"key": "customerTokenExpiresAt",
+			"value": ""
+		},
+		{
+			"key": "adminToken",
+			"value": ""
+		},
+		{
+			"key": "adminTokenExpiresAt",
+			"value": ""
+		},
+		{
+			"key": "refreshToken",
+			"value": ""
+		},
+		{
+			"key": "productId",
+			"value": "3"
+		},
+		{
+			"key": "categoryId",
+			"value": "1"
+		},
+		{
+			"key": "addressId",
+			"value": ""
+		},
+		{
+			"key": "cartItemId",
+			"value": ""
+		},
+		{
+			"key": "orderId",
+			"value": ""
+		},
+		{
+			"key": "paymentId",
+			"value": ""
+		},
+		{
+			"key": "stripeSessionId",
+			"value": ""
+		},
+		{
+			"key": "paymobOrderId",
+			"value": ""
+		},
+		{
+			"key": "resetToken",
+			"value": ""
+		}
+	]
+}
