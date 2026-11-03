@@ -3,6 +3,7 @@ package com.abubakr.ecommerceplatform.service;
 import com.abubakr.ecommerceplatform.config.PasswordResetProperties;
 import com.abubakr.ecommerceplatform.entity.PasswordResetToken;
 import com.abubakr.ecommerceplatform.entity.User;
+import com.abubakr.ecommerceplatform.event.PasswordResetRequested;
 import com.abubakr.ecommerceplatform.exception.InvalidTokenException;
 import com.abubakr.ecommerceplatform.repository.PasswordResetTokenRepository;
 import com.abubakr.ecommerceplatform.repository.RefreshTokenRepository;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
@@ -23,7 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,7 +38,7 @@ class PasswordResetServiceTest {
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private TokenService tokenService;
-    @Mock private EmailService emailService;
+    @Mock private ApplicationEventPublisher events;
 
     private PasswordResetService service;
 
@@ -46,7 +47,7 @@ class PasswordResetServiceTest {
         PasswordResetProperties properties =
                 new PasswordResetProperties(Duration.ofMinutes(30), "http://localhost:4200/reset-password");
         service = new PasswordResetService(userRepository, resetTokenRepository, refreshTokenRepository,
-                passwordEncoder, tokenService, emailService, properties);
+                passwordEncoder, tokenService, events, properties);
     }
 
     @Test
@@ -55,7 +56,7 @@ class PasswordResetServiceTest {
 
         service.requestReset("Ghost@Example.com");
 
-        verifyNoInteractions(emailService, resetTokenRepository);
+        verifyNoInteractions(events, resetTokenRepository);
     }
 
     @Test
@@ -69,8 +70,8 @@ class PasswordResetServiceTest {
 
         verify(resetTokenRepository).invalidateAllByUserId(7L);
         verify(resetTokenRepository).save(any(PasswordResetToken.class));
-        verify(emailService).sendPasswordResetEmail(eq("jane@example.com"), eq("Jane"),
-                eq("http://localhost:4200/reset-password?token=raw-reset"), eq(Duration.ofMinutes(30)));
+        verify(events).publishEvent(new PasswordResetRequested("jane@example.com", "Jane",
+                "http://localhost:4200/reset-password?token=raw-reset", Duration.ofMinutes(30)));
     }
 
     @Test

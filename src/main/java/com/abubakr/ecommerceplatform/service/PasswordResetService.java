@@ -8,7 +8,9 @@ import com.abubakr.ecommerceplatform.repository.PasswordResetTokenRepository;
 import com.abubakr.ecommerceplatform.repository.RefreshTokenRepository;
 import com.abubakr.ecommerceplatform.repository.UserRepository;
 import com.abubakr.ecommerceplatform.security.TokenService;
+import com.abubakr.ecommerceplatform.event.PasswordResetRequested;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +26,7 @@ public class PasswordResetService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher events;
     private final PasswordResetProperties properties;
 
     @Transactional
@@ -56,6 +58,7 @@ public class PasswordResetService {
                 .build());
 
         String resetLink = properties.resetUrl() + "?token=" + rawToken;
-        emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), resetLink, properties.tokenTtl());
+        // Emailed after commit, so the link is never sent for a token that failed to save.
+        events.publishEvent(new PasswordResetRequested(user.getEmail(), user.getFirstName(), resetLink, properties.tokenTtl()));
     }
 }
