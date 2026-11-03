@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -133,6 +134,12 @@ public class PaymentService {
     }
 
     private void recordSuccess(Payment payment, PaymentEvent event) {
+        // A second success event for the same charge (e.g. Stripe's completed + async_payment_succeeded) is not new money.
+        if (payment.getStatus() == PaymentStatus.SUCCEEDED
+                && Objects.equals(payment.getTransactionId(), event.transactionId())) {
+            log.info("Payment {} already recorded for transaction {}", payment.getId(), event.transactionId());
+            return;
+        }
         long expectedMinor = Money.toMinorUnits(payment.getAmount(), payment.getCurrency());
         if (event.amountMinor() != expectedMinor || !payment.getCurrency().equalsIgnoreCase(event.currency())) {
             payment.setStatus(PaymentStatus.FAILED);

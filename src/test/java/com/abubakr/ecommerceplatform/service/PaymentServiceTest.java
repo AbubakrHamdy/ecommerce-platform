@@ -202,6 +202,32 @@ class PaymentServiceTest {
     }
 
     @Test
+    void webhook_secondSuccessEventForTheSameCharge_isNotTreatedAsADoublePayment() {
+        Payment payment = givenWebhook(new PaymentEvent("evt_2", PaymentEvent.Type.SUCCEEDED, "cs_1", "pi_1", 5997, "egp"), true);
+        payment.setStatus(PaymentStatus.SUCCEEDED);
+        payment.setTransactionId("pi_1");
+        order.setStatus(OrderStatus.PAID);
+
+        service.handleWebhook(STRIPE, REQUEST);
+
+        assertThat(payment.getReviewNote()).isNull();
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void webhook_secondSuccessWithADifferentCharge_isFlaggedForRefund() {
+        Payment payment = givenWebhook(new PaymentEvent("evt_3", PaymentEvent.Type.SUCCEEDED, "cs_1", "txn_second", 5997, "egp"), true);
+        payment.setStatus(PaymentStatus.SUCCEEDED);
+        payment.setTransactionId("pi_1");
+        order.setStatus(OrderStatus.PAID);
+
+        service.handleWebhook(STRIPE, REQUEST);
+
+        assertThat(payment.getReviewNote()).contains("refund required");
+        verify(events).publishEvent(new PaymentNeedsReview(1L));
+    }
+
+    @Test
     void webhook_failedArrivingAfterSuccess_neverMovesThePaymentBackwards() {
         Payment payment = givenWebhook(event(PaymentEvent.Type.FAILED, 5997, "egp"), true);
         payment.setStatus(PaymentStatus.SUCCEEDED);
