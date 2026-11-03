@@ -6,6 +6,7 @@ import com.abubakr.ecommerceplatform.entity.Payment;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.enums.PaymentProvider;
 import com.abubakr.ecommerceplatform.enums.PaymentStatus;
+import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.ServiceUnavailableException;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpHeaders;
 
 import java.math.BigDecimal;
@@ -41,6 +43,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,6 +57,7 @@ class PaymentServiceTest {
     @Mock private PaymentGateways gateways;
     @Mock private PaymentGateway stripe;
     @Mock private PaymentGateway paymob;
+    @Mock private ApplicationEventPublisher events;
 
     private PaymentService service;
     private Order order;
@@ -61,7 +65,7 @@ class PaymentServiceTest {
     @BeforeEach
     void setUp() {
         StoreSettings bothProviders = new StoreSettings(new StoreProperties("AE", "EGP", List.of(STRIPE, PAYMOB)));
-        service = new PaymentService(orderRepository, paymentRepository, gateways, bothProviders, new PaymentMapperImpl());
+        service = new PaymentService(orderRepository, paymentRepository, gateways, bothProviders, new PaymentMapperImpl(), events);
         order = Order.builder().status(OrderStatus.PENDING).totalAmount(new BigDecimal("59.97")).currency("EGP").build();
         order.setId(7L);
     }
@@ -118,7 +122,7 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> service.startPayment(USER_ID, 7L, STRIPE)).isInstanceOf(ConflictException.class);
 
         PaymentService egyptOnly = new PaymentService(orderRepository, paymentRepository, gateways,
-                new StoreSettings(new StoreProperties("EG", null, null)), new PaymentMapperImpl());
+                new StoreSettings(new StoreProperties("EG", null, null)), new PaymentMapperImpl(), events);
         order.setStatus(OrderStatus.PENDING);
         assertThatThrownBy(() -> egyptOnly.startPayment(USER_ID, 7L, STRIPE))
                 .isInstanceOf(BadRequestException.class)
@@ -143,6 +147,7 @@ class PaymentServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(payment.getTransactionId()).isEqualTo("pi_1");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(events).publishEvent(OrderStatusChanged.to(7L, OrderStatus.PAID));
     }
 
     @Test
@@ -155,6 +160,7 @@ class PaymentServiceTest {
 
         verify(paymentRepository, never()).findByProviderAndProviderSessionId(any(), anyString());
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -166,6 +172,7 @@ class PaymentServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(payment.getReviewNote()).startsWith("Amount mismatch");
+        verify(events, never()).publishEvent(any(OrderStatusChanged.class));
     }
 
     @Test
@@ -187,6 +194,7 @@ class PaymentServiceTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(payment.getReviewNote()).contains("refund required");
+        verify(events, never()).publishEvent(any(OrderStatusChanged.class));
     }
 
     @Test

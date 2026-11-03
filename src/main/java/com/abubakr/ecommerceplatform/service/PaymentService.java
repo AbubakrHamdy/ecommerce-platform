@@ -7,6 +7,7 @@ import com.abubakr.ecommerceplatform.entity.Payment;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
 import com.abubakr.ecommerceplatform.enums.PaymentProvider;
 import com.abubakr.ecommerceplatform.enums.PaymentStatus;
+import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.InvalidWebhookException;
@@ -23,6 +24,7 @@ import com.abubakr.ecommerceplatform.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +47,7 @@ public class PaymentService {
     private final PaymentGateways gateways;
     private final StoreSettings storeSettings;
     private final PaymentMapper paymentMapper;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public PaymentSessionResponse startPayment(Long userId, Long orderId, PaymentProvider requested) {
@@ -146,6 +149,7 @@ public class PaymentService {
         Order order = payment.getOrder();
         if (order.getStatus() == OrderStatus.PENDING) {
             order.setStatus(OrderStatus.PAID);
+            events.publishEvent(OrderStatusChanged.to(order.getId(), OrderStatus.PAID));
         } else {
             payment.setReviewNote("Order was " + order.getStatus() + " when this payment succeeded; refund required");
             log.error("Payment {} succeeded but order {} is {}: refund required", payment.getId(), order.getId(),

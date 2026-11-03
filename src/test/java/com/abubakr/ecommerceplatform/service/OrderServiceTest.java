@@ -10,7 +10,9 @@ import com.abubakr.ecommerceplatform.entity.Order;
 import com.abubakr.ecommerceplatform.entity.OrderItem;
 import com.abubakr.ecommerceplatform.entity.Product;
 import com.abubakr.ecommerceplatform.entity.User;
+import com.abubakr.ecommerceplatform.enums.CancellationReason;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
+import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.ResourceNotFoundException;
@@ -28,6 +30,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -41,6 +44,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -56,6 +60,7 @@ class OrderServiceTest {
     @Mock private CacheManager cacheManager;
     @Mock private Cache productCache;
     @Mock private PaymentService paymentService;
+    @Mock private ApplicationEventPublisher events;
 
     private OrderService service;
     private Cart cart;
@@ -66,7 +71,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         service = new OrderService(orderRepository, cartRepository, addressRepository, productRepository, orderMapper,
-                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)), paymentService);
+                cacheManager, new StoreSettings(new StoreProperties("EG", null, null)), paymentService, events);
         User user = User.builder().email("jane@example.com").build();
         user.setId(USER_ID);
         cart = Cart.builder().user(user).build();
@@ -109,6 +114,7 @@ class OrderServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("Not enough stock for 'Wireless Mouse'");
         verify(orderRepository, never()).save(any());
+        verifyNoInteractions(events);
         assertThat(cart.getItems()).hasSize(2);
     }
 
@@ -119,13 +125,18 @@ class OrderServiceTest {
         when(cartRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(cart));
         when(addressRepository.findByIdAndUserId(1L, USER_ID)).thenReturn(Optional.of(address));
         when(productRepository.reserveStock(anyLong(), anyInt())).thenReturn(1);
-        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+            Order saved = inv.getArgument(0);
+            saved.setId(42L);
+            return saved;
+        });
 
         service.checkout(USER_ID, new CheckoutRequest(1L));
 
         ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(saved.capture());
         Order order = saved.getValue();
+        verify(events).publishEvent(OrderStatusChanged.to(42L, OrderStatus.PENDING));
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(order.getTotalAmount()).isEqualByComparingTo("939.97");
         assertThat(order.getCurrency()).isEqualTo("EGP");
@@ -190,6 +201,7 @@ class OrderServiceTest {
         service.cancelMyOrder(USER_ID, 7L);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(events).publishEvent(OrderStatusChanged.cancelled(7L, CancellationReason.CUSTOMER));
         verify(paymentService).closeOpenSessions(7L);
         InOrder released = inOrder(productRepository);
         released.verify(productRepository).releaseStock(1L, 1);
@@ -204,6 +216,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.cancelMyOrder(USER_ID, 7L)).isInstanceOf(ConflictException.class);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -222,6 +235,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.updateStatus(7L, OrderStatus.PAID))
                 .isInstanceOf(ConflictException.class)
                 .hasMessage("The order is already PAID");
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -232,6 +246,7 @@ class OrderServiceTest {
         service.updateStatus(7L, OrderStatus.PROCESSING);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(events).publishEvent(OrderStatusChanged.to(7L, OrderStatus.PROCESSING));
         verify(productRepository, never()).releaseStock(anyLong(), anyInt());
     }
 
@@ -243,6 +258,7 @@ class OrderServiceTest {
         service.updateStatus(7L, OrderStatus.CANCELLED);
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(events).publishEvent(OrderStatusChanged.cancelled(7L, CancellationReason.STORE));
         verify(productRepository).releaseStock(1L, 1);
         verify(productRepository).releaseStock(3L, 2);
     }
@@ -255,6 +271,7 @@ class OrderServiceTest {
         assertThat(service.expireIfStillPending(7L)).isFalse();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         verify(productRepository, never()).releaseStock(anyLong(), anyInt());
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -264,6 +281,7 @@ class OrderServiceTest {
 
         assertThat(service.expireIfStillPending(7L)).isTrue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(events).publishEvent(OrderStatusChanged.cancelled(7L, CancellationReason.PAYMENT_EXPIRED));
         verify(productRepository).releaseStock(3L, 2);
     }
 

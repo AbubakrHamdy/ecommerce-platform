@@ -12,7 +12,9 @@ import com.abubakr.ecommerceplatform.entity.Order;
 import com.abubakr.ecommerceplatform.entity.OrderItem;
 import com.abubakr.ecommerceplatform.entity.Product;
 import com.abubakr.ecommerceplatform.entity.ShippingAddress;
+import com.abubakr.ecommerceplatform.enums.CancellationReason;
 import com.abubakr.ecommerceplatform.enums.OrderStatus;
+import com.abubakr.ecommerceplatform.event.OrderStatusChanged;
 import com.abubakr.ecommerceplatform.exception.BadRequestException;
 import com.abubakr.ecommerceplatform.exception.ConflictException;
 import com.abubakr.ecommerceplatform.exception.ResourceNotFoundException;
@@ -24,6 +26,7 @@ import com.abubakr.ecommerceplatform.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +50,7 @@ public class OrderService {
     private final CacheManager cacheManager;
     private final StoreSettings storeSettings;
     private final PaymentService paymentService;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public OrderResponse checkout(Long userId, CheckoutRequest request) {
@@ -84,6 +88,7 @@ public class OrderService {
 
         Order saved = orderRepository.save(order);
         cart.getItems().clear();
+        events.publishEvent(OrderStatusChanged.to(saved.getId(), OrderStatus.PENDING));
         return orderMapper.toResponse(saved);
     }
 
@@ -104,7 +109,7 @@ public class OrderService {
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new ConflictException("Only pending orders can be cancelled; please contact support to cancel a paid order");
         }
-        cancel(order);
+        cancel(order, CancellationReason.CUSTOMER);
         return orderMapper.toResponse(order);
     }
 
@@ -131,9 +136,10 @@ public class OrderService {
             throw new ConflictException("Cannot change order status from " + current + " to " + next);
         }
         if (next == OrderStatus.CANCELLED) {
-            cancel(order);
+            cancel(order, CancellationReason.STORE);
         } else {
             order.setStatus(next);
+            events.publishEvent(OrderStatusChanged.to(order.getId(), next));
         }
         return orderMapper.toResponse(order);
     }
@@ -145,13 +151,14 @@ public class OrderService {
         if (order.getStatus() != OrderStatus.PENDING) {
             return false;
         }
-        cancel(order);
+        cancel(order, CancellationReason.PAYMENT_EXPIRED);
         return true;
     }
 
     // Puts reserved stock back; products are released in id order, matching checkout, to avoid deadlocks.
-    void cancel(Order order) {
+    void cancel(Order order, CancellationReason reason) {
         order.setStatus(OrderStatus.CANCELLED);
+        events.publishEvent(OrderStatusChanged.cancelled(order.getId(), reason));
         paymentService.closeOpenSessions(order.getId());
         order.getItems().stream()
                 .sorted(Comparator.comparing(item -> item.getProduct().getId()))
